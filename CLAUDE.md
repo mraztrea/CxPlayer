@@ -1,7 +1,6 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan:
-`specs/001-player-activity/plan.md`
+shell commands, and other important information, read the current plan
 <!-- SPECKIT END -->
 
 ## 🚨 CRITICAL RULE: Reference Code 🚨
@@ -163,3 +162,4 @@ This project is indexed by GitNexus as **recland-v4** (15910 symbols, 27827 rela
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+

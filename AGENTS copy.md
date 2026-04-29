@@ -1,16 +1,15 @@
-<!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan:
-`specs/001-player-activity/plan.md`
-<!-- SPECKIT END -->
-
 ## 🚨 CRITICAL RULE: Reference Code 🚨
 
+- You may specifically read these files to understand intended behavior, design patterns, or legacy logic, but you must implement the solutions afresh in the appropriate `apps/` or `share/` directories following the project's current architecture (Clean Architecture/NestJS/Next.js).
 - Sử dụng tiếng Việt Nam để tạo tài liệu và phản hồi cho tôi.
 - Nếu sửa vào nhiều file code, hãy tạo 1 file work flow , tên file dạng wf_{YYYYMMDD}_{tên workflow}.md trong thư mục memory_bank. Nếu quá trình làm việc cần migrate database hay cần chạy lệnh gì, hãy thêm hướng dẫn vào file này.
 **- Lập trình trên môi trường windows nên hãy sử dụng các lệnh terminal của PowerShell (sử dụng pwsh  thay cho powershell), không sử dụng các lệnh linux.**
-- Nội dung của git commit phải sử dụng tiếng Việt. Vẫn giữ nguyên các tiền tố như: "fix", "feat", "docs", "style", "refactor", "perf", "test", "chore", "revert"
+- Nội dung của git commit phải sử dụng tiếng Việt. Vẫn giữ nguyên các tiền tố như: "fix", "feat", "docs", "style", "refactor", "perf", "test", "chore", "revert".
+- Nếu cần sử dụng Code-Index MCP, hãy thực hiện set_project_path và index project trước khi bắt đầu sử dụng.
+- Nếu cần sử dụng codebase-memory-mcp, hãy thực hiện index_repository trước khi bắt đầu sử dụng.
 - Nếu cần sử dụng Serena MCP, hãy thực hiện `activate_project` và `check_onboarding_performed` trước khi bắt đầu sử dụng. Chi tiết xem mục **Serena MCP** bên dưới.
+- Không sử dụng Morph-Mcp để search codebase (warpgrep_codebase_search), chỉ sử dụng để edit file (edit_file tool).
+
 
 # First Rule
 
@@ -76,6 +75,76 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## 📁 Quy tắc tổ chức thư mục Usecases
+
+Khi tạo usecase mới trong bất kỳ module nào (ví dụ: `applications`, `jobs`, `users`...), **PHẢI** phân loại vào đúng thư mục con theo chức năng:
+
+```
+usecases/
+├── submission/   # Tạo mới entity + side-effects (tạo record, snapshot, schedule job, thông báo sau khi tạo)
+├── workflow/     # Chuyển trạng thái / state transition (confirm, reject, pay, approve...)
+├── queries/      # Truy vấn / đọc dữ liệu (get, list, check, search...)
+└── helpers/      # Utility functions / helpers dùng chung bởi nhiều usecase
+```
+
+**Ví dụ thực tế** (`apps/api-portal/src/modules/applications/core/application/usecases/`):
+
+| Nhóm | File |
+|------|------|
+| `submission/` | `apply-job`, `introduce-cv`, `handle-apply-post-create`, `handle-submit-cv-post-create` |
+| `workflow/` | `admin-confirm-candidate`, `candidate-confirm-application`, `candidate-reject-application`, `employer-pay-application`, `employer-reject-application` |
+| `queries/` | `check-apply-status`, `get-employer-applications`, `get-employer-application-detail` |
+| `helpers/` | `application-notification.helper`, `application-workflow.helper` |
+
+> **Lý do:** Khi số lượng usecase tăng nhiều, việc phân nhóm giúp dễ navigate, dễ maintain và thể hiện rõ Clean Architecture (Command vs Query separation).
+
+
+# Chú ý logic:
+- Các endpoint API của Admin phải sử dụng tiền tố v1/admin/. Không sử dụng chung với API Endpoint của User (v1/).
+- Các selectbox có lượng dữ liệu lớn đều dùng theo cách này (hiển thị Autocomplete, fetch data khi người dùng gõ tìm kiếm, debounce API call, không render tất cả data ra DOM một lúc).
+- Toàn bộ dự án đều dùng chung 1 drive storage được cấu hình trong file `apps\api-portal\.env` (Hiện tại đang set `FILE_STORAGE_DRIVER=s3`).
+
+
+## 📧 Quy tắc tạo Email / Templates
+- Tất cả các email được tạo ra sau này đều phải tuân thủ chuẩn: **Căn lề trái (Align Left)** phần nội dung (không sử dụng align center). Mặc định khai báo cục bộ hoặc thêm class hỗ trợ căn trái.
+
+## 🎨 UI & Styling
+- Mặc định sử dụng màu primary của hệ thống là `#17677b` (trong Tailwind ứng với class `brand-500` hoặc các class `brand-*`). Tránh tự ý sử dụng các màu mặc định như `blue-600`, hãy dùng `brand-500`.
+
+# Hướng dẫn tham khảo code cũ
+
+**Tham khảo về cấu trúc dự án cần xây dựng:**
+- [architecture-and-design-patterns.md](docs/architecture-and-design-patterns.md)
+- [GitNexus](repo "recland-v3"):Sử dụng GitNexus với Repo "recland-v3" để tham khảo cấu trúc code cũ. (đây là phiên bản cũ V3)
+**Tham khảo về logic xử lý luồng tuyển dụng:**
+- [GitNexus](repo "Recland"): Sử dụng GitNexus với Repo "Recland" để tham khảo logic xử lý luồng tuyển dụng. (đây là phiên bản cũ V2, sử dụng Laravel và VueJS)
+
+
+## 📚 LLM Wiki — Quy tắc tra cứu & cập nhật luồng tuyển dụng
+
+### TRƯỚC khi thực hiện skill `speckit-specify` liên quan đến luồng tuyển dụng
+**BẮT BUỘC** đọc wiki trước khi viết spec — để spec biết bối cảnh đã implement:
+1. Đọc `_wiki/wiki/syntheses/status-implementation-audit.md` — xem trạng thái nào **đã** / **chưa** implement, tránh re-implement hoặc bỏ sót dependency
+2. Đọc `_wiki/wiki/INDEX.md` — tìm entity/concept liên quan đến feature đang cần spec
+3. Đọc các trang wiki entity liên quan (ví dụ: `_wiki/wiki/entities/admin-pending-approval.md`, `_wiki/wiki/concepts/state-machine-overview.md`)
+
+> **Lý do:** Spec mới phải biết trạng thái hiện tại của codebase, logic nghiệp vụ đã ghi nhận, và P priority còn dở để tránh mâu thuẫn.
+
+### SAU KHI skill `speckit-implement` hoàn thành
+**BẮT BUỘC** cập nhật wiki ngay sau khi implement xong:
+1. **Cập nhật `_wiki/wiki/syntheses/status-implementation-audit.md`:**
+   - Đánh dấu trạng thái mới implement là ✅ Đầy đủ
+   - Ghi rõ: usecase file path, controller endpoint, notification logic, frontend component
+   - Cập nhật bảng tổng quan (số đã implement / tổng)
+   - Đánh ~~strikethrough~~ những priority đã done trong bảng `Ưu tiên triển khai`
+2. **Thêm entry vào `_wiki/wiki/LOG.md`:**
+   - Format: `### UPDATE — Spec XXX hoàn thành: [tên feature]`
+   - Nội dung: ngày, spec ID, files tạo/sửa, logic đặc biệt cần ghi nhớ (ví dụ: NTD không nhận thông báo khi reject, lý do lưu vào note)
+3. Cập nhật frontmatter `updated:` của file synthesis
+
+> **Wiki root:** `_wiki/` — đọc `_wiki/CLAUDE.md` để hiểu schema trước khi sửa
+
 
 <!-- serena:start -->
 ## 🧠 Serena MCP — Semantic Code Intelligence & Memory
@@ -163,3 +232,10 @@ This project is indexed by GitNexus as **recland-v4** (15910 symbols, 27827 rela
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+at `specs/137-email-activation/plan.md`
+<!-- SPECKIT END -->
