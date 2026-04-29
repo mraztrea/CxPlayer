@@ -74,3 +74,5 @@ rtk pwsh -NoProfile -Command "Set-Location 'CxPlayer'; .\gradlew.bat connectedDe
 
 - `https://example.com/sample.mp4` chỉ là placeholder; thay bằng URL video thật khi verify.
 - Với `content://`, nên kiểm thử qua file manager hoặc app ngoài thật vì `adb am start` khó mô phỏng quyền truy cập tạm thời chính xác.
+- Explicit launch hiện hỗ trợ các extra keys `extra_media_uris`, `extra_start_index`, và `extra_start_position_ms`.
+- Ngày 2026-04-29 chưa có device/emulator attach trong môi trường shell, nên các bước `adb shell am start ...` mới được xác nhận ở mức tài liệu và chưa chạy end-to-end trên thiết bị.

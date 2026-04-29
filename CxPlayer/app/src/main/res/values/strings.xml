@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">CxPlayer</string>
+    <string name="player_launch_error_missing_source">Không tìm thấy nguồn video hợp lệ để mở.</string>
+    <string name="player_launch_error_unsupported_source">Nguồn video không được hỗ trợ hoặc không thể truy cập.</string>
+    <string name="player_launch_error_invalid_index">Không tìm thấy mục bắt đầu, đã chuyển về video đầu tiên.</string>
 </resources>

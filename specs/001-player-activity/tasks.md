@@ -21,9 +21,9 @@
 
 **Purpose**: Chuẩn bị các file đích và khung package cho player entry task
 
-- [ ] T001 Tạo package `ui/player` và xác nhận các file đích cho feature trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/`
-- [ ] T002 [P] Chuẩn bị resource skeleton cho player entry trong `CxPlayer/app/src/main/res/layout/activity_player.xml`
-- [ ] T003 [P] Chuẩn bị chuỗi thông báo lỗi launch trong `CxPlayer/app/src/main/res/values/strings.xml`
+- [X] T001 Tạo package `ui/player` và xác nhận các file đích cho feature trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/`
+- [X] T002 [P] Chuẩn bị resource skeleton cho player entry trong `CxPlayer/app/src/main/res/layout/activity_player.xml`
+- [X] T003 [P] Chuẩn bị chuỗi thông báo lỗi launch trong `CxPlayer/app/src/main/res/values/strings.xml`
 
 **Checkpoint**: Có đủ vị trí file để bắt đầu phần foundation và implementation
 
@@ -33,11 +33,11 @@
 
 **⚠️ CRITICAL**: Không bắt đầu user story nào trước khi phase này hoàn tất
 
-- [ ] T004 Cập nhật khai báo `PlayerActivity` và intent-filter video trong `CxPlayer/app/src/main/AndroidManifest.xml`
-- [ ] T005 [P] Bổ sung fullscreen theme cho player entry trong `CxPlayer/app/src/main/res/values/themes.xml`
-- [ ] T006 Tạo `PlayerActivity` skeleton và wiring `onCreate` cơ bản trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T007 Tạo mô hình chuẩn hóa launch request (`PlaybackRequest`, `MediaSourceRef`, `LaunchOutcome`) trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T008 Tạo logic parse/normalize URI và validate đầu vào chung trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T004 Cập nhật khai báo `PlayerActivity` và intent-filter video trong `CxPlayer/app/src/main/AndroidManifest.xml`
+- [X] T005 [P] Bổ sung fullscreen theme cho player entry trong `CxPlayer/app/src/main/res/values/themes.xml`
+- [X] T006 Tạo `PlayerActivity` skeleton và wiring `onCreate` cơ bản trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T007 Tạo mô hình chuẩn hóa launch request (`PlaybackRequest`, `MediaSourceRef`, `LaunchOutcome`) trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T008 Tạo logic parse/normalize URI và validate đầu vào chung trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: Foundation sẵn sàng, các user story có thể được triển khai tăng dần trên cùng pipeline launch
 
@@ -49,11 +49,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Hoàn thiện xử lý `ACTION_VIEW` external launch trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T010 [US1] Áp dụng `singleTask`/relaunch handling để tránh duplicate player experience trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T011 [US1] Gắn `activity_player.xml` làm content view tối thiểu cho player entry trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T012 [P] [US1] Thêm test parser/normalizer cho URI external trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
-- [ ] T013 [US1] Kiểm tra và chỉnh manifest match đúng MIME type/scheme theo contract trong `CxPlayer/app/src/main/AndroidManifest.xml`
+- [X] T009 [US1] Hoàn thiện xử lý `ACTION_VIEW` external launch trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T010 [US1] Áp dụng `singleTask`/relaunch handling để tránh duplicate player experience trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T011 [US1] Gắn `activity_player.xml` làm content view tối thiểu cho player entry trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T012 [P] [US1] Thêm test parser/normalizer cho URI external trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
+- [X] T013 [US1] Kiểm tra và chỉnh manifest match đúng MIME type/scheme theo contract trong `CxPlayer/app/src/main/AndroidManifest.xml`
 
 **Checkpoint**: US1 hoạt động độc lập như MVP
 
@@ -65,10 +65,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Mở rộng parser để nhận explicit extras cho `sources`, `startIndex`, `startPositionMs` trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T015 [US2] Hoàn thiện validation và fallback cho `startIndex`/`startPositionMs` trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T016 [P] [US2] Thêm test cho multi-source selection và start position validation trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
-- [ ] T017 [US2] Kết nối kết quả `PlaybackRequest` đã chuẩn hóa vào đường khởi tạo playback đầu tiên trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T014 [US2] Mở rộng parser để nhận explicit extras cho `sources`, `startIndex`, `startPositionMs` trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T015 [US2] Hoàn thiện validation và fallback cho `startIndex`/`startPositionMs` trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T016 [P] [US2] Thêm test cho multi-source selection và start position validation trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
+- [X] T017 [US2] Kết nối kết quả `PlaybackRequest` đã chuẩn hóa vào đường khởi tạo playback đầu tiên trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: US1 và US2 đều dùng được độc lập
 
@@ -80,10 +80,10 @@
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Thêm user-facing error handling và finish flow an toàn trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T019 [US3] Hoàn thiện thông báo lỗi launch cho các trường hợp reject/fallback trong `CxPlayer/app/src/main/res/values/strings.xml`
-- [ ] T020 [P] [US3] Thêm test cho empty sources, invalid index, unsupported scheme, inaccessible source trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
-- [ ] T021 [US3] Rà lại contract hành vi reject để khớp implementation trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T018 [US3] Thêm user-facing error handling và finish flow an toàn trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T019 [US3] Hoàn thiện thông báo lỗi launch cho các trường hợp reject/fallback trong `CxPlayer/app/src/main/res/values/strings.xml`
+- [X] T020 [P] [US3] Thêm test cho empty sources, invalid index, unsupported scheme, inaccessible source trong `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
+- [X] T021 [US3] Rà lại contract hành vi reject để khớp implementation trong `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: Cả 3 user story đều hoàn chỉnh và độc lập
 
@@ -91,8 +91,8 @@
 
 **Purpose**: Hoàn thiện verification, consistency, và tài liệu vận hành
 
-- [ ] T022 [P] Rà soát đồng bộ giữa `AndroidManifest.xml`, `themes.xml`, `strings.xml`, và `PlayerActivity.kt` trong `CxPlayer/app/src/main/`
-- [ ] T023 Chạy và sửa các lỗi build/unit test liên quan feature bằng `CxPlayer/gradlew.bat` từ module `CxPlayer/`
+- [X] T022 [P] Rà soát đồng bộ giữa `AndroidManifest.xml`, `themes.xml`, `strings.xml`, và `PlayerActivity.kt` trong `CxPlayer/app/src/main/`
+- [X] T023 Chạy và sửa các lỗi build/unit test liên quan feature bằng `CxPlayer/gradlew.bat` từ module `CxPlayer/`
 - [ ] T024 Xác minh quickstart scenarios và cập nhật ghi chú nếu implementation khác thiết kế trong `specs/001-player-activity/quickstart.md`
 
 ## Dependencies & Execution Order
