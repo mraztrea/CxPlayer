@@ -17,7 +17,8 @@
 | Network | OkHttp 4.x + Media3 OkHttp DataSource |
 | DI | Hilt |
 | UI | Material 3 + Jetpack Compose (controls overlay) |
-| Persistence | DataStore Preferences |
+| Persistence | DataStore Preferences + Room DB |
+| AI Subtitle | Soniox STT API (WebSocket) |
 | File Browse | SAF (Storage Access Framework) + SMB (smbj) |
 
 ---
@@ -63,7 +64,27 @@
 - [ ] Picture-in-Picture (PiP) mode
 - [ ] Background audio playback
 - [ ] Auto-rotation / orientation lock
-- [ ] Settings screen (default speed, subtitle size, buffer config)
+
+### P4 - AI Subtitle Generation (Phase 5)
+- [ ] Trích xuất audio PCM từ video đang phát (via ExoPlayer AudioProcessor)
+- [ ] Kết nối Soniox API qua WebSocket (real-time STT)
+- [ ] Hiển thị transcript gốc dưới dạng subtitle overlay
+- [ ] Dịch real-time sang ngôn ngữ đích (one-way translation)
+- [ ] Auto-detect ngôn ngữ nguồn
+- [ ] Hỗ trợ custom context & translation terms
+- [ ] Xuất subtitle ra file SRT sau khi xem xong
+- [ ] Lưu cache subtitle đã tạo (tránh gọi API lại)
+
+### P5 - Settings & Preferences (Phase 6)
+- [ ] Settings screen đầy đủ (Jetpack Compose)
+- [ ] Bật/tắt từng gesture riêng lẻ (volume, brightness, seek, pinch-zoom, double-tap, long-press)
+- [ ] Nhớ vị trí phát video đã xem (per-URI, persistent qua Room DB)
+- [ ] Nhớ độ sáng đã chọn (persist across sessions)
+- [ ] Nhớ tốc độ phát mặc định
+- [ ] Nhớ audio/subtitle track đã chọn per video
+- [ ] Cấu hình Soniox API key & ngôn ngữ dịch
+- [ ] Theme (Dark/Light/System)
+- [ ] Export/Import settings
 
 ---
 
@@ -74,16 +95,23 @@ app/
 ├── data/
 │   ├── preferences/         # DataStore - user settings
 │   ├── datasource/          # DataSource factories (OkHttp, SMB)
-│   └── repository/          # PlaybackStateRepository
+│   ├── db/                  # Room DB (PlaybackHistory, SubtitleCache)
+│   └── repository/          # PlaybackStateRepository, SettingsRepository
 ├── domain/
-│   ├── model/               # VideoItem, SubtitleTrack, PlaybackState
+│   ├── model/               # VideoItem, SubtitleTrack, PlaybackState, Settings
 │   └── usecase/             # PlayVideo, LoadSubtitle, BrowseNetwork
 ├── player/
 │   ├── CxPlayerManager.kt          # ExoPlayer lifecycle wrapper
 │   ├── CxRenderersFactory.kt       # FFmpeg-enabled renderers
 │   ├── CxLoadControl.kt            # Custom buffer config
 │   ├── CxTrackSelector.kt          # Track selection logic
-│   └── CxMediaSourceFactory.kt     # URI → MediaSource resolver
+│   ├── CxMediaSourceFactory.kt     # URI → MediaSource resolver
+│   └── CxAudioProcessor.kt         # Extract PCM for AI subtitle
+├── subtitle/
+│   ├── SonioxClient.kt             # WebSocket client (Soniox STT API)
+│   ├── AiSubtitleManager.kt        # Coordinate audio → STT → subtitle
+│   ├── SrtExporter.kt              # Export generated subtitle to SRT
+│   └── SubtitleCacheManager.kt     # Cache generated subtitles
 ├── ui/
 │   ├── player/
 │   │   ├── PlayerActivity.kt       # Single Activity (entry point)
@@ -95,7 +123,10 @@ app/
 │   │   ├── TrackSelector.kt        # Audio/subtitle picker
 │   │   └── SubtitleDialog.kt       # Subtitle settings
 │   └── settings/
-│       └── SettingsActivity.kt
+│       ├── SettingsScreen.kt        # Compose Settings UI
+│       ├── GestureSettingsSection.kt
+│       ├── AiSubtitleSettingsSection.kt
+│       └── PlaybackSettingsSection.kt
 └── util/
     ├── UriResolver.kt               # content:// → file path
     └── TimeFormatter.kt
@@ -481,20 +512,188 @@ override fun onUserLeaveHint() {
 }
 ```
 
-#### 4.4.4 Settings
+---
 
-| Setting | Type | Default | Storage |
-|---------|------|---------|---------|
-| Default speed | Float | 1.0 | DataStore |
-| Subtitle font size | Int | 16 | DataStore |
-| Subtitle bold | Boolean | false | DataStore |
-| Resume playback | Boolean | true | DataStore |
-| Buffer size (LAN) | Enum | Normal | DataStore |
-| Auto-rotate | Boolean | true | DataStore |
-| Swipe sensitivity | Float | 1.0 | DataStore |
-| Default aspect ratio | Enum | Fit | DataStore |
-| Preferred audio lang | String | "" | DataStore |
-| Preferred subtitle lang | String | "vi" | DataStore |
+### Phase 5: AI Subtitle Generation (2 tuần)
+
+> **Tham chiếu**: Port từ dự án [my-translator](./my-translator), sử dụng Soniox real-time STT API.
+
+#### 4.5.1 Luồng hoạt động
+
+```
+Video Playback → ExoPlayer AudioProcessor → PCM 16kHz mono
+    → WebSocket (wss://stt-rt.soniox.com/transcribe-websocket)
+    → Soniox STT + Translation → Subtitle Overlay
+    → (optional) Export SRT file
+```
+
+#### 4.5.2 CxAudioProcessor
+
+```kotlin
+class CxAudioProcessor : BaseAudioProcessor() {
+    var onPcmData: ((ByteArray) -> Unit)? = null
+
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        val pcm = resampleTo16kMono(inputBuffer, inputFormat)
+        onPcmData?.invoke(pcm)
+        replaceOutputBuffer(inputBuffer.remaining()).put(inputBuffer).flip()
+    }
+}
+```
+
+#### 4.5.3 SonioxClient (port từ soniox.js)
+
+```kotlin
+class SonioxClient(private val scope: CoroutineScope) {
+    private var ws: WebSocket? = null
+    private val _subtitleFlow = MutableSharedFlow<SubtitleEvent>()
+    val subtitleFlow: SharedFlow<SubtitleEvent> = _subtitleFlow
+
+    data class Config(
+        val apiKey: String,
+        val sourceLanguage: String = "auto",
+        val targetLanguage: String = "vi",
+        val translationTerms: List<TranslationTerm> = emptyList()
+    )
+
+    fun connect(config: Config) {
+        val request = Request.Builder()
+            .url("wss://stt-rt.soniox.com/transcribe-websocket").build()
+        ws = OkHttpClient().newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(ws: WebSocket, response: Response) {
+                ws.send(buildConfigJson(config))
+            }
+            override fun onMessage(ws: WebSocket, text: String) {
+                scope.launch { _subtitleFlow.emit(parseResponse(text)) }
+            }
+        })
+    }
+
+    fun sendAudio(pcmData: ByteArray) { ws?.send(pcmData.toByteString()) }
+    fun disconnect() { ws?.close(1000, "stopped") }
+}
+
+sealed class SubtitleEvent {
+    data class Original(val text: String, val lang: String?) : SubtitleEvent()
+    data class Translation(val text: String) : SubtitleEvent()
+    data class Provisional(val text: String) : SubtitleEvent()
+}
+```
+
+#### 4.5.4 AiSubtitleManager
+
+```kotlin
+class AiSubtitleManager(
+    private val sonioxClient: SonioxClient,
+    private val audioProcessor: CxAudioProcessor
+) {
+    private val srtEntries = mutableListOf<SrtEntry>()
+
+    fun start(config: SonioxClient.Config) {
+        sonioxClient.connect(config)
+        audioProcessor.onPcmData = { pcm -> sonioxClient.sendAudio(pcm) }
+    }
+
+    fun stop() {
+        audioProcessor.onPcmData = null
+        sonioxClient.disconnect()
+    }
+
+    fun exportSrt(outputFile: File) = SrtExporter.write(srtEntries, outputFile)
+}
+```
+
+#### 4.5.5 UI: AI Subtitle Toggle
+
+```
+┌──────────────────────────────────────────┐
+│ [← Back]  Video Title     [🤖 AI] [⚙️] │
+│                                          │
+│              PlayerView                  │
+│   ┌────────────────────────────────┐     │
+│   │ 🤖 Xin chào, hôm nay...      │     │  ← AI subtitle
+│   │    Hello, today...             │     │  ← Translation
+│   └────────────────────────────────┘     │
+│  00:12:34 ═══════●═══════════ 01:45:00   │
+│       [⏪]    [⏯️]    [⏩]    [🔊] [⚙️]  │
+└──────────────────────────────────────────┘
+```
+
+---
+
+### Phase 6: Settings & Preferences (1.5 tuần)
+
+#### 4.6.1 Settings Table
+
+| Category | Setting | Type | Default | Storage |
+|----------|---------|------|---------|---------|
+| **Playback** | Default speed | Float | 1.0 | DataStore |
+| | Resume playback | Boolean | true | DataStore |
+| | Default aspect ratio | Enum | Fit | DataStore |
+| | Auto-rotate | Boolean | true | DataStore |
+| | Preferred audio lang | String | "" | DataStore |
+| **Subtitle** | Font size | Int | 16 | DataStore |
+| | Bold | Boolean | false | DataStore |
+| | Preferred lang | String | "vi" | DataStore |
+| **Gesture** | Swipe volume | Boolean | true | DataStore |
+| | Swipe brightness | Boolean | true | DataStore |
+| | Swipe seek | Boolean | true | DataStore |
+| | Pinch-to-zoom | Boolean | true | DataStore |
+| | Double-tap | Boolean | true | DataStore |
+| | Long-press ff | Boolean | true | DataStore |
+| | Sensitivity | Float | 1.0 | DataStore |
+| **Network** | Buffer size (LAN) | Enum | Normal | DataStore |
+| **AI Subtitle** | Soniox API key | String | "" | EncryptedPrefs |
+| | Source language | String | "auto" | DataStore |
+| | Target language | String | "vi" | DataStore |
+| | Auto-start | Boolean | false | DataStore |
+| **History** | Remember position | Boolean | true | DataStore |
+| | Remember brightness | Boolean | true | DataStore |
+| | Max entries | Int | 500 | DataStore |
+| **Appearance** | Theme | Enum | System | DataStore |
+
+#### 4.6.2 PlaybackHistoryEntity (Room DB)
+
+```kotlin
+@Entity(tableName = "playback_history")
+data class PlaybackHistoryEntity(
+    @PrimaryKey val videoUri: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val lastPlayedAt: Long,
+    val brightness: Float?,
+    val speed: Float?,
+    val audioTrackIndex: Int?,
+    val subtitleTrackIndex: Int?,
+    val title: String?
+)
+
+@Dao
+interface PlaybackHistoryDao {
+    @Query("SELECT * FROM playback_history WHERE videoUri = :uri")
+    suspend fun getByUri(uri: String): PlaybackHistoryEntity?
+
+    @Upsert
+    suspend fun upsert(entity: PlaybackHistoryEntity)
+
+    @Query("DELETE FROM playback_history WHERE lastPlayedAt < :cutoff")
+    suspend fun deleteOlderThan(cutoff: Long)
+}
+```
+
+#### 4.6.3 GestureSettings
+
+```kotlin
+data class GestureSettings(
+    val enableSwipeVolume: Boolean = true,
+    val enableSwipeBrightness: Boolean = true,
+    val enableSwipeSeek: Boolean = true,
+    val enablePinchZoom: Boolean = true,
+    val enableDoubleTap: Boolean = true,
+    val enableLongPressFf: Boolean = true,
+    val swipeSensitivity: Float = 1.0f
+)
+```
 
 ---
 
@@ -550,6 +749,15 @@ dependencies {
     implementation "androidx.compose.material3:material3"
     implementation "androidx.activity:activity-compose:1.9.3"
 
+    // Room DB (playback history, subtitle cache)
+    def room = "2.6.1"
+    implementation "androidx.room:room-runtime:$room"
+    implementation "androidx.room:room-ktx:$room"
+    kapt "androidx.room:room-compiler:$room"
+
+    // Encrypted SharedPreferences (API key storage)
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+
     // DI
     implementation "com.google.dagger:hilt-android:2.53.1"
     kapt "com.google.dagger:hilt-compiler:2.53.1"
@@ -592,11 +800,23 @@ gantt
     OkHttp DataSource + buffer :p4a, after p3d, 2d
     SMB browser                :p4b, after p4a, 3d
     PiP mode                   :p4c, after p4a, 1d
-    Settings screen            :p4d, after p4c, 2d
-    Polish + testing           :p4e, after p4d, 3d
+
+    section Phase 5 - AI Subtitle
+    CxAudioProcessor           :p5a, after p4c, 2d
+    SonioxClient WebSocket     :p5b, after p5a, 3d
+    AiSubtitleManager          :p5c, after p5b, 2d
+    SRT export + cache         :p5d, after p5c, 2d
+    AI subtitle UI             :p5e, after p5c, 1d
+
+    section Phase 6 - Settings
+    Settings screen (Compose)  :p6a, after p5d, 2d
+    Gesture toggle settings    :p6b, after p6a, 1d
+    Playback history (Room)    :p6c, after p6a, 2d
+    AI subtitle settings       :p6d, after p6b, 1d
+    Polish + testing           :p6e, after p6d, 3d
 ```
 
-**Estimated total: ~7.5 tuần**
+**Estimated total: ~12 tuần**
 
 ---
 
@@ -619,6 +839,12 @@ gantt
 7. Play MKV with DTS audio → verify FFmpeg decoder kicks in
 8. SMB share → verify browse + playback
 9. PiP transition → verify playback continues
+10. AI subtitle → enable, verify transcript appears in overlay
+11. AI subtitle → export SRT, verify timing and content
+12. Settings → toggle gesture off, verify gesture ignored
+13. Playback history → close app, reopen video, verify resume position
+14. Brightness memory → set brightness, close, reopen, verify restored
+15. Settings → change Soniox API key, verify reconnection
 
 ---
 
@@ -640,3 +866,23 @@ gantt
 | `viewer.f` | Track selection popup (audio+subtitle) | `TrackSelectorDialog` |
 | `FfmpegLibrary` | FFmpeg native loader | Media3 built-in |
 | `FfmpegDecoder` | JNI bridge to FFmpeg | Media3 built-in |
+
+## 9. Tham chiếu từ my-translator (Soniox integration)
+
+| my-translator Component | Chức năng | CxPlayer equivalent |
+|---|---|---|
+| `soniox.js` → `SonioxClient` | WebSocket client to Soniox STT API | `SonioxClient.kt` |
+| `soniox.js` → `_buildContext()` | Build context with terms/translation_terms | `SonioxClient.buildConfigJson()` |
+| `soniox.js` → `_handleResponse()` | Parse tokens (original/translation/provisional) | `SonioxClient.parseResponse()` |
+| `soniox.js` → `_seamlessReset()` | Session reset every 3min (make-before-break) | `SonioxClient.seamlessReset()` |
+| `app.js` → audio capture flow | System audio → PCM → Soniox | `CxAudioProcessor` → `SonioxClient` |
+| `settings.js` | API key, language config | `SettingsScreen` (AI Subtitle section) |
+
+**Soniox API Key Points (từ phân tích my-translator):**
+- Endpoint: `wss://stt-rt.soniox.com/transcribe-websocket`
+- Model: `stt-rt-v4`
+- Audio: PCM 16-bit signed LE, 16kHz, mono
+- Session reset mỗi 3 phút để tránh timeout
+- Context carryover: giữ 500 ký tự dịch gần nhất
+- Keepalive: gửi mỗi 15s khi không có audio
+- Chi phí: ~$0.12/giờ
