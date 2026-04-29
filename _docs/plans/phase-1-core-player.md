@@ -22,40 +22,39 @@
 
 ## Dependencies (Phase 1 only)
 
-```groovy
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-    id 'com.google.dagger.hilt.android'
-    id 'kotlin-kapt'
-}
+> Xem chi tiết tại `gradle/libs.versions.toml` và `app/build.gradle.kts`.
+> Project dùng Kotlin DSL + Version Catalog + KSP (không dùng kapt).
 
-android {
-    namespace 'com.cxplayer'
-    compileSdk 35
-    defaultConfig {
-        minSdk 24
-        targetSdk 35
-    }
-}
+**Versions:**
+| Library | Version |
+|---------|---------|
+| Media3 (ExoPlayer) | 1.10.0 |
+| Hilt (DI) | 2.59.2 |
+| KSP | 2.2.10-2.0.2 |
+| Material | 1.12.0 |
+| AppCompat | 1.7.0 |
+| Lifecycle ViewModel | 2.8.7 |
 
-dependencies {
-    def media3 = "1.5.1"
-    implementation "androidx.media3:media3-exoplayer:$media3"
-    implementation "androidx.media3:media3-ui:$media3"
-    implementation "androidx.media3:media3-common:$media3"
-    implementation "androidx.media3:media3-datasource:$media3"
-    implementation "androidx.media3:media3-extractor:$media3"
-    implementation "androidx.media3:media3-session:$media3"
+**Plugins (app module):** `android.application`, `kotlin.compose`, `ksp`, `hilt`
 
-    implementation "com.google.android.material:material:1.12.0"
-    implementation "androidx.appcompat:appcompat:1.7.0"
-    implementation "androidx.core:core-ktx:1.15.0"
-    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7"
+**Key dependencies:**
+```kotlin
+// Media3 / ExoPlayer
+implementation(libs.androidx.media3.exoplayer)
+implementation(libs.androidx.media3.ui)
+implementation(libs.androidx.media3.common)
+implementation(libs.androidx.media3.datasource)
+implementation(libs.androidx.media3.extractor)
+implementation(libs.androidx.media3.session)
 
-    implementation "com.google.dagger:hilt-android:2.53.1"
-    kapt "com.google.dagger:hilt-compiler:2.53.1"
-}
+// Hilt DI
+implementation(libs.hilt.android)
+ksp(libs.hilt.compiler)
+
+// Android
+implementation(libs.androidx.appcompat)
+implementation(libs.google.material)
+implementation(libs.androidx.lifecycle.viewmodel.ktx)
 ```
 
 ---

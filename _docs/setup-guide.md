@@ -87,108 +87,174 @@ Click **Apply** → đợi download.
 
 ## Bước 5: Cấu hình Dependencies (Phase 1)
 
-Mở `app/build.gradle` (hoặc `build.gradle.kts`) và thêm dependencies:
+> **Lưu ý**: Project sử dụng Kotlin DSL (`.gradle.kts`) + Version Catalog (`libs.versions.toml`).
+> AGP 9.x đã tích hợp sẵn Kotlin — không cần plugin `org.jetbrains.kotlin.android` riêng.
+> Dùng KSP thay cho kapt (hiệu suất build tốt hơn).
 
-### `settings.gradle` (project root)
-```groovy
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-dependencyResolution {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-rootProject.name = "CxPlayer"
-include ':app'
+### `gradle/libs.versions.toml` (Version Catalog)
+```toml
+[versions]
+agp = "9.2.0"
+kotlin = "2.2.10"
+ksp = "2.2.10-2.0.2"
+composeBom = "2026.02.01"
+coreKtx = "1.10.1"
+lifecycleRuntimeKtx = "2.6.1"
+activityCompose = "1.8.0"
+junit = "4.13.2"
+junitVersion = "1.1.5"
+espressoCore = "3.5.1"
+
+# Phase 1: Core Player
+media3 = "1.10.0"
+hilt = "2.59.2"
+material = "1.12.0"
+appcompat = "1.7.0"
+lifecycleViewmodelKtx = "2.8.7"
+
+[libraries]
+# AndroidX Core
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycleViewmodelKtx" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+google-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+
+# Compose
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+# Media3 / ExoPlayer (Phase 1)
+androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+androidx-media3-datasource = { group = "androidx.media3", name = "media3-datasource", version.ref = "media3" }
+androidx-media3-extractor = { group = "androidx.media3", name = "media3-extractor", version.ref = "media3" }
+androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
+
+# Hilt DI (Phase 1)
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+
+# Test
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ```
 
-### `build.gradle` (project root)
-```groovy
+### `gradle.properties` — thêm dòng sau
+```properties
+# Allow KSP to add Kotlin source sets with AGP 9.x built-in Kotlin
+android.disallowKotlinSourceSets=false
+```
+
+### `build.gradle.kts` (project root)
+```kotlin
 plugins {
-    id 'com.android.application' version '8.7.3' apply false
-    id 'org.jetbrains.kotlin.android' version '2.1.0' apply false
-    id 'com.google.dagger.hilt.android' version '2.53.1' apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.hilt) apply false
 }
 ```
 
-### `app/build.gradle`
-```groovy
+### `app/build.gradle.kts`
+```kotlin
 plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-    id 'com.google.dagger.hilt.android'
-    id 'kotlin-kapt'
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
 }
 
 android {
-    namespace 'com.cxplayer'
-    compileSdk 35
+    namespace = "com.cxplayer"
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
-        applicationId "com.cxplayer"
-        minSdk 24
-        targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+        applicationId = "com.cxplayer"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
-
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
-
-    kotlinOptions {
-        jvmTarget = '17'
-    }
-
     buildFeatures {
-        compose true
-        viewBinding true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.14'
+        compose = true
+        viewBinding = true
     }
 }
 
 dependencies {
-    // Media3 / ExoPlayer
-    def media3 = "1.5.1"
-    implementation "androidx.media3:media3-exoplayer:$media3"
-    implementation "androidx.media3:media3-ui:$media3"
-    implementation "androidx.media3:media3-common:$media3"
-    implementation "androidx.media3:media3-datasource:$media3"
-    implementation "androidx.media3:media3-extractor:$media3"
-    implementation "androidx.media3:media3-session:$media3"
-
-    // Android
-    implementation "com.google.android.material:material:1.12.0"
-    implementation "androidx.appcompat:appcompat:1.7.0"
-    implementation "androidx.core:core-ktx:1.15.0"
-    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7"
-
     // Compose
-    implementation platform("androidx.compose:compose-bom:2024.12.01")
-    implementation "androidx.compose.ui:ui"
-    implementation "androidx.compose.material3:material3"
-    implementation "androidx.activity:activity-compose:1.9.3"
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
 
-    // DI
-    implementation "com.google.dagger:hilt-android:2.53.1"
-    kapt "com.google.dagger:hilt-compiler:2.53.1"
+    // AndroidX Core
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.appcompat)
+
+    // Material Design (for XML views)
+    implementation(libs.google.material)
+
+    // Media3 / ExoPlayer (Phase 1)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.datasource)
+    implementation(libs.androidx.media3.extractor)
+    implementation(libs.androidx.media3.session)
+
+    // Hilt DI (Phase 1)
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+
+    // Test
+    testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.junit)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }
 ```
 
