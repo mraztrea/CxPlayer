@@ -2,8 +2,13 @@ package com.cxplayer.ui.player
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.media.AudioManager
 import android.net.Uri
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.ImageButton
 import androidx.annotation.IdRes
 import androidx.lifecycle.Lifecycle
@@ -169,6 +174,119 @@ class PlayerActivityPlaybackTest {
         }
     }
 
+    @Test
+    fun surfaceSwipeGesturesAdjustVolumeBrightnessAndSeek() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val audioManager = context.getSystemService(AudioManager::class.java)
+
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            var baselineVolume = 0
+            var originalVolume = 0
+            var baselineBrightness = 0f
+            var baselinePosition = 0L
+
+            scenario.onActivity { activity ->
+                val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                originalVolume = activity.currentMusicStreamVolume()
+                baselineVolume = (maxVolume / 2).coerceAtLeast(1)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, baselineVolume, 0)
+
+                baselineBrightness = activity.currentGestureBrightness()
+                baselinePosition = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+
+                dispatchSwipe(activity, R.id.playerView, 0.8f, 0.8f, 0.8f, 0.2f)
+                dispatchSwipe(activity, R.id.playerView, 0.2f, 0.8f, 0.2f, 0.2f)
+                dispatchSwipe(activity, R.id.playerView, 0.25f, 0.5f, 0.55f, 0.5f)
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            try {
+                scenario.onActivity { activity ->
+                    assertTrue(activity.currentMusicStreamVolume() > baselineVolume)
+                    assertTrue(activity.currentGestureBrightness() > baselineBrightness)
+                    assertTrue(requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs > baselinePosition)
+                }
+            } finally {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
+            }
+        }
+    }
+
+    @Test
+    fun surfaceDoubleTapGesturesTogglePlaybackAndSeekByZone() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                dispatchDoubleTap(activity, R.id.playerView, 0.5f, 0.5f)
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            scenario.onActivity { activity ->
+                assertFalse(requireNotNull(activity.currentPlaybackSnapshot()).playWhenReady)
+
+                activity.seekToPosition(20_000L)
+                val beforeLeftDoubleTap = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                dispatchDoubleTap(activity, R.id.playerView, 0.16f, 0.5f)
+                val afterLeftDoubleTap = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                assertTrue(afterLeftDoubleTap < beforeLeftDoubleTap)
+
+                activity.seekToPosition(5_000L)
+                val beforeRightDoubleTap = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                dispatchDoubleTap(activity, R.id.playerView, 0.84f, 0.5f)
+                val afterRightDoubleTap = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                assertTrue(afterRightDoubleTap > beforeRightDoubleTap)
+            }
+        }
+    }
+
+    @Test
+    fun surfaceLongPressTemporarilyAdjustsPlaybackSpeed() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            lateinit var anchor: TouchAnchor
+
+            scenario.onActivity { activity ->
+                anchor = dispatchLongPressDown(activity, R.id.playerView, 0.5f, 0.5f)
+            }
+
+            SystemClock.sleep((ViewConfiguration.getLongPressTimeout() + 150).toLong())
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            scenario.onActivity { activity ->
+                assertEquals(2f, activity.currentPlaybackState().playbackSpeed, 0f)
+                dispatchSinglePointerEvent(
+                    view = requireView(activity, R.id.playerView),
+                    action = MotionEvent.ACTION_UP,
+                    x = anchor.x,
+                    y = anchor.y,
+                    downTime = anchor.downTime,
+                    eventTime = SystemClock.uptimeMillis()
+                )
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            scenario.onActivity { activity ->
+                assertEquals(1f, activity.currentPlaybackState().playbackSpeed, 0f)
+            }
+        }
+    }
+
+    @Test
+    fun surfacePinchGestureUpdatesPlayerZoomScale() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            var baselinePosition = 0L
+
+            scenario.onActivity { activity ->
+                baselinePosition = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                dispatchPinch(activity, R.id.playerView, startDistanceFraction = 0.08f, endDistanceFraction = 0.22f)
+            }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+            scenario.onActivity { activity ->
+                assertTrue(activity.currentPlayerZoomScale() > 1f)
+                assertEquals(baselinePosition, requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs)
+            }
+        }
+    }
+
     private fun buildLocalLaunchIntent(): Intent {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val tempFile = File.createTempFile("player-activity", ".mp4", context.cacheDir)
@@ -205,4 +323,216 @@ class PlayerActivityPlaybackTest {
         assertTrue(view is android.widget.TextView)
         assertTrue((view as android.widget.TextView).text.toString().isNotBlank())
     }
+
+    private fun dispatchSwipe(
+        activity: PlayerActivity,
+        @IdRes viewId: Int,
+        startXFraction: Float,
+        startYFraction: Float,
+        endXFraction: Float,
+        endYFraction: Float,
+        moveSteps: Int = 4
+    ) {
+        val view = requireView(activity, viewId)
+        val startX = view.width * startXFraction
+        val startY = view.height * startYFraction
+        val endX = view.width * endXFraction
+        val endY = view.height * endYFraction
+        val downTime = SystemClock.uptimeMillis()
+
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_DOWN, startX, startY, downTime, downTime)
+        for (step in 1..moveSteps) {
+            val progress = step / moveSteps.toFloat()
+            val x = startX + ((endX - startX) * progress)
+            val y = startY + ((endY - startY) * progress)
+            dispatchSinglePointerEvent(
+                view,
+                MotionEvent.ACTION_MOVE,
+                x,
+                y,
+                downTime,
+                downTime + (step * 16L)
+            )
+        }
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_UP, endX, endY, downTime, downTime + 100L)
+    }
+
+    private fun dispatchDoubleTap(
+        activity: PlayerActivity,
+        @IdRes viewId: Int,
+        xFraction: Float,
+        yFraction: Float
+    ) {
+        val view = requireView(activity, viewId)
+        val x = view.width * xFraction
+        val y = view.height * yFraction
+        val firstDown = SystemClock.uptimeMillis()
+
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_DOWN, x, y, firstDown, firstDown)
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_UP, x, y, firstDown, firstDown + 30L)
+
+        val secondDown = firstDown + 90L
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_DOWN, x, y, secondDown, secondDown)
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_UP, x, y, secondDown, secondDown + 30L)
+    }
+
+    private fun dispatchLongPressDown(
+        activity: PlayerActivity,
+        @IdRes viewId: Int,
+        xFraction: Float,
+        yFraction: Float
+    ): TouchAnchor {
+        val view = requireView(activity, viewId)
+        val x = view.width * xFraction
+        val y = view.height * yFraction
+        val downTime = SystemClock.uptimeMillis()
+        dispatchSinglePointerEvent(view, MotionEvent.ACTION_DOWN, x, y, downTime, downTime)
+        return TouchAnchor(x = x, y = y, downTime = downTime)
+    }
+
+    private fun dispatchPinch(
+        activity: PlayerActivity,
+        @IdRes viewId: Int,
+        startDistanceFraction: Float,
+        endDistanceFraction: Float
+    ) {
+        val view = requireView(activity, viewId)
+        val centerX = view.width / 2f
+        val centerY = view.height / 2f
+        val startDistance = view.width * startDistanceFraction
+        val endDistance = view.width * endDistanceFraction
+        val downTime = SystemClock.uptimeMillis()
+
+        dispatchSinglePointerEvent(
+            view,
+            MotionEvent.ACTION_DOWN,
+            centerX - startDistance,
+            centerY,
+            downTime,
+            downTime
+        )
+
+        dispatchMultiPointerEvent(
+            view = view,
+            action = MotionEvent.ACTION_POINTER_DOWN,
+            actionIndex = 1,
+            downTime = downTime,
+            eventTime = downTime + 10L,
+            points = listOf(
+                TouchPoint(centerX - startDistance, centerY),
+                TouchPoint(centerX + startDistance, centerY)
+            )
+        )
+
+        for (step in 1..4) {
+            val progress = step / 4f
+            val distance = startDistance + ((endDistance - startDistance) * progress)
+            dispatchMultiPointerEvent(
+                view = view,
+                action = MotionEvent.ACTION_MOVE,
+                actionIndex = 0,
+                downTime = downTime,
+                eventTime = downTime + 10L + (step * 16L),
+                points = listOf(
+                    TouchPoint(centerX - distance, centerY),
+                    TouchPoint(centerX + distance, centerY)
+                )
+            )
+        }
+
+        dispatchMultiPointerEvent(
+            view = view,
+            action = MotionEvent.ACTION_POINTER_UP,
+            actionIndex = 1,
+            downTime = downTime,
+            eventTime = downTime + 90L,
+            points = listOf(
+                TouchPoint(centerX - endDistance, centerY),
+                TouchPoint(centerX + endDistance, centerY)
+            )
+        )
+
+        dispatchSinglePointerEvent(
+            view,
+            MotionEvent.ACTION_UP,
+            centerX - endDistance,
+            centerY,
+            downTime,
+            downTime + 110L
+        )
+    }
+
+    private fun dispatchSinglePointerEvent(
+        view: View,
+        action: Int,
+        x: Float,
+        y: Float,
+        downTime: Long,
+        eventTime: Long
+    ) {
+        MotionEvent.obtain(downTime, eventTime, action, x, y, 0).also { event ->
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+    }
+
+    private fun dispatchMultiPointerEvent(
+        view: View,
+        action: Int,
+        actionIndex: Int,
+        downTime: Long,
+        eventTime: Long,
+        points: List<TouchPoint>
+    ) {
+        val pointerProperties = Array(points.size) { index ->
+            MotionEvent.PointerProperties().apply {
+                id = index
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+        }
+        val pointerCoords = Array(points.size) { index ->
+            MotionEvent.PointerCoords().apply {
+                x = points[index].x
+                y = points[index].y
+                pressure = 1f
+                size = 1f
+            }
+        }
+        val motionAction = if (action == MotionEvent.ACTION_MOVE) {
+            action
+        } else {
+            action + (actionIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+        }
+
+        MotionEvent.obtain(
+            downTime,
+            eventTime,
+            motionAction,
+            points.size,
+            pointerProperties,
+            pointerCoords,
+            0,
+            0,
+            1f,
+            1f,
+            0,
+            0,
+            InputDevice.SOURCE_TOUCHSCREEN,
+            0
+        ).also { event ->
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+    }
 }
+
+private data class TouchPoint(
+    val x: Float,
+    val y: Float
+)
+
+private data class TouchAnchor(
+    val x: Float,
+    val y: Float,
+    val downTime: Long
+)

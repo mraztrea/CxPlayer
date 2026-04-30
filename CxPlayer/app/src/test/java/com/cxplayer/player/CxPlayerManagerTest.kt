@@ -114,6 +114,23 @@ class CxPlayerManagerTest {
         assertEquals(0L, session.currentPositionMsValue)
     }
 
+    @Test
+    fun `temporary playback speed helpers update active session and reset to normal`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L))
+        val session = factory.lastSession()
+
+        manager.setPlaybackSpeed(2f)
+        assertEquals(2f, session.playbackSpeed, 0f)
+        assertEquals(2f, manager.currentState().playbackSpeed, 0f)
+
+        manager.resetPlaybackSpeed()
+        assertEquals(1f, session.playbackSpeed, 0f)
+        assertEquals(1f, manager.currentState().playbackSpeed, 0f)
+    }
+
     private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {
         return PlaybackRequest(
             sources = listOf(
@@ -154,6 +171,7 @@ private class FakePlayerSession : PlayerSession {
     override val player: Player? = null
 
     override var playWhenReady: Boolean = false
+    override var playbackSpeed: Float = 1f
     var currentPositionMsValue: Long = 0L
     var currentMediaItemIndexValue: Int = 0
     var durationMsValue: Long = 120_000L

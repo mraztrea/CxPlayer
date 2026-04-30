@@ -2,6 +2,7 @@ package com.cxplayer.ui.player
 
 import android.content.ContentResolver
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +22,7 @@ import com.cxplayer.R
 import com.cxplayer.databinding.ActivityPlayerBinding
 import com.cxplayer.player.CxPlayerManager
 import com.cxplayer.player.PlaybackSnapshot
+import com.cxplayer.player.PlaybackStateSnapshot
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
@@ -34,6 +36,8 @@ private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
     private lateinit var playerView: PlayerView
+    private lateinit var audioManager: AudioManager
+    private lateinit var gestureController: GestureController
     private lateinit var topChrome: ViewGroup
     private lateinit var bottomChrome: ViewGroup
     private lateinit var topRegion: ViewGroup
@@ -56,6 +60,8 @@ class PlayerActivity : AppCompatActivity() {
     private var activeRequest: PlaybackRequest? = null
     private var topSystemInsetPx: Int = 0
     private var bottomSystemInsetPx: Int = 0
+    private var currentWindowBrightness: Float = 0.5f
+    private var currentZoomScale: Float = 1f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,9 +70,12 @@ class PlayerActivity : AppCompatActivity() {
 
         playerView = binding.playerView
         bindChromeViews()
+        audioManager = getSystemService(AudioManager::class.java)
+        setVolumeControlStream(AudioManager.STREAM_MUSIC)
         initializeTopChrome()
         initializeBottomChrome()
         initializeChromeLayoutBehavior()
+        initializeGestureController()
         pendingSnapshot = restoreSnapshot(savedInstanceState)
         updatePendingLaunch(intent)
         updateTopChrome()
@@ -106,6 +115,9 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::gestureController.isInitialized) {
+            gestureController.release()
+        }
         playerManager.release()
         super.onDestroy()
     }
@@ -136,6 +148,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     internal fun currentPlaybackSnapshot(): PlaybackSnapshot? = playerManager.exportSnapshot()
+
+    internal fun currentPlaybackState(): PlaybackStateSnapshot = playerManager.currentState()
+
+    internal fun currentGestureBrightness(): Float {
+        return window.attributes.screenBrightness.takeIf { it >= 0f } ?: currentWindowBrightness
+    }
+
+    internal fun currentPlayerZoomScale(): Float = currentZoomScale
+
+    internal fun currentMusicStreamVolume(): Int = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
     internal fun hasChromeSkeleton(): Boolean =
         ::topChrome.isInitialized &&
@@ -272,6 +294,21 @@ class PlayerActivity : AppCompatActivity() {
         updateBottomChrome()
     }
 
+    private fun initializeGestureController() {
+        currentWindowBrightness = resolveWindowBrightness()
+        currentZoomScale = 1f
+        gestureController = GestureController(
+            playerView = playerView,
+            onVolumeChange = ::applyVolumeDelta,
+            onBrightnessChange = ::applyBrightnessDelta,
+            onSeekDelta = ::applySeekDelta,
+            onTogglePlayPause = ::togglePlayback,
+            onFastForward = ::startTemporaryFastForward,
+            onFastForwardEnd = ::endTemporaryFastForward,
+            onZoom = ::applyZoomFactor
+        )
+    }
+
     private fun initializeChromeLayoutBehavior() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.playerRoot) { _, windowInsets ->
             val systemBarsInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -321,6 +358,57 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun updateTopChrome() {
         titleView.text = resolveActiveTitle()
+    }
+
+    private fun applyVolumeDelta(delta: Float) {
+        val volumeStep = delta.toInt()
+        if (volumeStep == 0) {
+            return
+        }
+
+        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val targetVolume = (currentVolume + volumeStep).coerceIn(0, maxVolume)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+    }
+
+    private fun applyBrightnessDelta(delta: Float) {
+        currentWindowBrightness = (currentGestureBrightness() + delta).coerceIn(0.05f, 1f)
+        window.attributes = window.attributes.apply {
+            screenBrightness = currentWindowBrightness
+        }
+    }
+
+    private fun applySeekDelta(deltaMs: Long) {
+        val state = playerManager.currentState()
+        if (!state.hasActiveSession) {
+            return
+        }
+
+        seekToPosition(state.currentPositionMs + deltaMs)
+    }
+
+    private fun togglePlayback() {
+        val state = playerManager.currentState()
+        if (state.hasActiveSession && state.playWhenReady) {
+            pausePlayback()
+        } else {
+            playPlayback()
+        }
+    }
+
+    private fun startTemporaryFastForward(speed: Float) {
+        playerManager.setPlaybackSpeed(speed)
+    }
+
+    private fun endTemporaryFastForward() {
+        playerManager.resetPlaybackSpeed()
+    }
+
+    private fun applyZoomFactor(scaleFactor: Float) {
+        currentZoomScale = (currentZoomScale * scaleFactor).coerceIn(1f, 3f)
+        playerView.scaleX = currentZoomScale
+        playerView.scaleY = currentZoomScale
     }
 
     private fun renderChromeLayout(rootHeight: Int) {
@@ -421,6 +509,10 @@ class PlayerActivity : AppCompatActivity() {
             playerView.player = null
         }
         updateBottomChrome()
+    }
+
+    private fun resolveWindowBrightness(): Float {
+        return window.attributes.screenBrightness.takeIf { it >= 0f } ?: 0.5f
     }
 
     private fun showMessage(@StringRes messageResId: Int) {

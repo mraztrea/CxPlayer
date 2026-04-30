@@ -3,12 +3,16 @@ package com.cxplayer.player
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.cxplayer.ui.player.PlaybackRequest
 
 private const val TRANSPORT_SEEK_INCREMENT_MS = 10_000L
+private const val DEFAULT_PLAYBACK_SPEED = 1f
+private const val MIN_PLAYBACK_SPEED = 0.25f
+private const val MAX_PLAYBACK_SPEED = 2f
 
 class CxPlayerManager internal constructor(
     private val sessionFactory: PlayerSessionFactory
@@ -54,6 +58,7 @@ class CxPlayerManager internal constructor(
         playlistSize = sourceUris.size
         bindAttachedView(currentSession)
         currentSession.setMediaItems(sourceUris, targetIndex, targetPosition)
+        currentSession.playbackSpeed = DEFAULT_PLAYBACK_SPEED
         currentSession.prepare()
         currentSession.playWhenReady = effectiveSnapshot?.playWhenReady ?: playWhenReady
 
@@ -111,6 +116,17 @@ class CxPlayerManager internal constructor(
         }
     }
 
+    fun setPlaybackSpeed(speed: Float) {
+        session?.let { currentSession ->
+            currentSession.playbackSpeed = speed.coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED)
+            refreshState()
+        }
+    }
+
+    fun resetPlaybackSpeed() {
+        setPlaybackSpeed(DEFAULT_PLAYBACK_SPEED)
+    }
+
     fun release() {
         detach()
         session?.release()
@@ -142,6 +158,7 @@ class CxPlayerManager internal constructor(
             currentIndex = currentSession.currentMediaItemIndex.coerceIn(0, maxIndex),
             currentPositionMs = clampPosition(currentSession.currentPositionMs, currentSession.durationMs),
             durationMs = normalizeDuration(currentSession.durationMs),
+            playbackSpeed = currentSession.playbackSpeed,
             playWhenReady = currentSession.playWhenReady,
             hasActiveSession = true
         )
@@ -190,6 +207,7 @@ data class PlaybackStateSnapshot(
     val currentIndex: Int = 0,
     val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val playbackSpeed: Float = DEFAULT_PLAYBACK_SPEED,
     val playWhenReady: Boolean = false,
     val hasActiveSession: Boolean = false
 )
@@ -212,6 +230,7 @@ internal interface PlayerSessionFactory {
 internal interface PlayerSession {
     val player: Player?
     var playWhenReady: Boolean
+    var playbackSpeed: Float
     val currentPositionMs: Long
     val currentMediaItemIndex: Int
     val durationMs: Long
@@ -249,6 +268,12 @@ private class ExoPlayerSession(
         get() = exoPlayer.playWhenReady
         set(value) {
             exoPlayer.playWhenReady = value
+        }
+
+    override var playbackSpeed: Float
+        get() = exoPlayer.playbackParameters.speed
+        set(value) {
+            exoPlayer.playbackParameters = PlaybackParameters(value)
         }
 
     override val currentPositionMs: Long
