@@ -17,9 +17,9 @@
 
 **Purpose**: Chuẩn bị các bề mặt file cần cho manager, unit test và instrumentation smoke test
 
-- [ ] T001 Create `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt` as the feature entry point for player ownership and lifecycle management
-- [ ] T002 [P] Create `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt` for host-side manager behavior coverage
-- [ ] T003 [P] Create `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt` for device/emulator smoke coverage
+- [X] T001 Create `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt` as the feature entry point for player ownership and lifecycle management
+- [X] T002 [P] Create `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt` for host-side manager behavior coverage
+- [X] T003 [P] Create `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt` for device/emulator smoke coverage
 
 ---
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: Không bắt đầu user story nào trước khi phase này xong
 
-- [ ] T004 Implement the base manager API, playback snapshot model, and single-session ownership rules in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [ ] T005 [P] Extend clamp/reset and rejected-empty normalization coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
-- [ ] T006 Replace direct `ExoPlayer` field ownership with a `CxPlayerManager` boundary in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T007 [P] Add manager construction/release regression coverage in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
+- [X] T004 Implement the base manager API, playback snapshot model, and single-session ownership rules in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T005 [P] Extend clamp/reset and rejected-empty normalization coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/PlayerActivityLaunchParserTest.kt`
+- [X] T006 Replace direct `ExoPlayer` field ownership with a `CxPlayerManager` boundary in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T007 [P] Add manager construction/release regression coverage in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
 
 **Checkpoint**: `PlayerActivity` no longer owns `ExoPlayer` directly and the shared manager contract is ready for story work
 
@@ -46,13 +46,13 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add accepted-request playlist preparation tests in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
-- [ ] T009 [P] [US1] Add local/http launch smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T008 [P] [US1] Add accepted-request playlist preparation tests in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
+- [X] T009 [P] [US1] Add local/http launch smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement playlist loading, selected-item start, normalized position start, and auto-play behavior in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [ ] T011 [US1] Refactor accepted launch handling and recoverable launch-error flow in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T010 [US1] Implement playlist loading, selected-item start, normalized position start, and auto-play behavior in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T011 [US1] Refactor accepted launch handling and recoverable launch-error flow in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 1 hoạt động độc lập cho local file và HTTP/HTTPS launch path
 
@@ -66,13 +66,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Add snapshot export/restore coverage in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
-- [ ] T013 [P] [US2] Add recreate and foreground-return smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T012 [P] [US2] Add snapshot export/restore coverage in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
+- [X] T013 [P] [US2] Add recreate and foreground-return smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement snapshot capture, snapshot restore, and `playWhenReady` persistence in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [ ] T015 [US2] Implement `savedInstanceState` handoff and API-level symmetric init/release callbacks in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T014 [US2] Implement snapshot capture, snapshot restore, and `playWhenReady` persistence in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T015 [US2] Implement `savedInstanceState` handoff and API-level symmetric init/release callbacks in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 2 hoạt động độc lập và restore drift nằm trong ngưỡng spec
 
@@ -86,13 +86,13 @@
 
 ### Tests for User Story 3
 
-- [ ] T016 [P] [US3] Add transport control coverage for play, pause, seekTo, seekForward, and seekBack in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
-- [ ] T017 [P] [US3] Add no-crash transport command smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T016 [P] [US3] Add transport control coverage for play, pause, seekTo, seekForward, and seekBack in `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt`
+- [X] T017 [P] [US3] Add no-crash transport command smoke coverage in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Implement play, pause, seekTo, seekForward, seekBack, and state accessor APIs in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [ ] T019 [US3] Route transport operations through `CxPlayerManager` and keep `PlayerView` state synchronized in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T018 [US3] Implement play, pause, seekTo, seekForward, seekBack, and state accessor APIs in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T019 [US3] Route transport operations through `CxPlayerManager` and keep `PlayerView` state synchronized in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 3 hoạt động độc lập và manager đã sẵn sàng cho control UI ở các phase tiếp theo
 
@@ -102,8 +102,8 @@
 
 **Purpose**: Dọn dẹp, xác nhận chéo, và khóa chất lượng trước khi chuyển sang task kế tiếp
 
-- [ ] T020 Clean up obsolete direct-player imports and duplicate ownership code in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt` and `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [ ] T021 Run host-side regression validation with `CxPlayer/gradlew.bat` using `testDebugUnitTest`
+- [X] T020 Clean up obsolete direct-player imports and duplicate ownership code in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt` and `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T021 Run host-side regression validation with `CxPlayer/gradlew.bat` using `testDebugUnitTest`
 - [ ] T022 Run instrumentation smoke validation with `CxPlayer/gradlew.bat` using `connectedDebugAndroidTest`
 
 ---

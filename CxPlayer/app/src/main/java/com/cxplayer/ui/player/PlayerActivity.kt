@@ -8,93 +8,170 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
+import com.cxplayer.player.CxPlayerManager
+import com.cxplayer.player.PlaybackSnapshot
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Locale
 
+private const val STATE_PLAYBACK_INDEX = "state_playback_index"
+private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
+private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
+
 class PlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
-    private var player: ExoPlayer? = null
+    private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
+    private var pendingLaunch: PendingLaunch? = null
+    private var pendingSnapshot: PlaybackSnapshot? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
-        handleLaunchIntent(intent)
+        pendingSnapshot = restoreSnapshot(savedInstanceState)
+        updatePendingLaunch(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleLaunchIntent(intent)
+        pendingSnapshot = null
+        updatePendingLaunch(intent)
+        if (!isFinishing) {
+            beginPlaybackSession()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        beginPlaybackSession()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        captureSnapshot()
+        pendingSnapshot?.let { snapshot ->
+            outState.putInt(STATE_PLAYBACK_INDEX, snapshot.currentIndex)
+            outState.putLong(STATE_PLAYBACK_POSITION_MS, snapshot.currentPositionMs)
+            outState.putBoolean(STATE_PLAY_WHEN_READY, snapshot.playWhenReady)
+        }
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onStop() {
+        captureSnapshot()
+        playerManager.release()
+        syncPlayerState()
+        super.onStop()
     }
 
     override fun onDestroy() {
-        releasePlayer()
+        playerManager.release()
         super.onDestroy()
     }
 
-    private fun handleLaunchIntent(intent: Intent?) {
+    fun playPlayback() {
+        playerManager.play()
+        syncPlayerState()
+    }
+
+    fun pausePlayback() {
+        playerManager.pause()
+        syncPlayerState()
+    }
+
+    fun seekToPosition(positionMs: Long) {
+        playerManager.seekTo(positionMs)
+        syncPlayerState()
+    }
+
+    fun seekForward() {
+        playerManager.seekForward()
+        syncPlayerState()
+    }
+
+    fun seekBack() {
+        playerManager.seekBack()
+        syncPlayerState()
+    }
+
+    internal fun currentPlaybackSnapshot(): PlaybackSnapshot? = playerManager.exportSnapshot()
+
+    private fun updatePendingLaunch(intent: Intent?) {
         when (val outcome = PlaybackRequestParser.fromIntent(intent, contentResolver)) {
             is LaunchOutcome.Rejected -> {
+                pendingLaunch = null
                 showMessage(outcome.messageResId)
                 finish()
             }
 
             is LaunchOutcome.Ready -> {
-                initializePlayback(
+                pendingLaunch = PendingLaunch(
                     request = outcome.request,
-                    selectedIndex = outcome.selectedIndex,
-                    startPositionMs = outcome.effectiveStartPositionMs
+                    messageResId = null
                 )
             }
 
             is LaunchOutcome.FallbackSelected -> {
-                showMessage(outcome.messageResId)
-                initializePlayback(
+                pendingLaunch = PendingLaunch(
                     request = outcome.request,
-                    selectedIndex = outcome.selectedIndex,
-                    startPositionMs = outcome.effectiveStartPositionMs
+                    messageResId = outcome.messageResId
                 )
             }
         }
     }
 
-    private fun initializePlayback(
-        request: PlaybackRequest,
-        selectedIndex: Int,
-        startPositionMs: Long
-    ) {
-        releasePlayer()
-
-        player = ExoPlayer.Builder(this).build().also { exoPlayer ->
-            playerView.player = exoPlayer
-            exoPlayer.setMediaItems(
-                request.sources.map { MediaItem.fromUri(it.uriValue) },
-                selectedIndex,
-                startPositionMs
-            )
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
+    private fun beginPlaybackSession() {
+        val launch = pendingLaunch ?: return
+        playerManager.attach(playerView)
+        playerManager.load(
+            request = launch.request,
+            snapshot = pendingSnapshot
+        )
+        launch.messageResId?.let { messageResId ->
+            showMessage(messageResId)
+            pendingLaunch = launch.copy(messageResId = null)
         }
+        pendingSnapshot = null
+        syncPlayerState()
     }
 
-    private fun releasePlayer() {
-        playerView.player = null
-        player?.release()
-        player = null
+    private fun captureSnapshot() {
+        pendingSnapshot = playerManager.exportSnapshot() ?: pendingSnapshot
+    }
+
+    private fun restoreSnapshot(savedInstanceState: Bundle?): PlaybackSnapshot? {
+        if (savedInstanceState == null || !savedInstanceState.containsKey(STATE_PLAYBACK_INDEX)) {
+            return null
+        }
+
+        return PlaybackSnapshot(
+            currentIndex = savedInstanceState.getInt(STATE_PLAYBACK_INDEX),
+            currentPositionMs = savedInstanceState
+                .getLong(STATE_PLAYBACK_POSITION_MS)
+                .coerceAtLeast(0L),
+            playWhenReady = savedInstanceState.getBoolean(STATE_PLAY_WHEN_READY, true)
+        )
+    }
+
+    private fun syncPlayerState() {
+        if (!playerManager.currentState().hasActiveSession) {
+            playerView.player = null
+        }
     }
 
     private fun showMessage(@StringRes messageResId: Int) {
         Toast.makeText(this, messageResId, Toast.LENGTH_SHORT).show()
     }
 }
+
+private data class PendingLaunch(
+    val request: PlaybackRequest,
+    @param:StringRes val messageResId: Int?
+)
 
 data class PlaybackRequest(
     val sources: List<MediaSourceRef>,
@@ -227,24 +304,25 @@ object PlaybackRequestParser {
         }
 
         val safeStartPosition = input.startPositionMs.coerceAtLeast(0L)
-        val baseRequest = PlaybackRequest(
+        val selectedIndex = input.startIndex.coerceIn(0, sources.lastIndex)
+        val normalizedRequest = PlaybackRequest(
             sources = sources,
-            startIndex = input.startIndex,
+            startIndex = selectedIndex,
             startPositionMs = safeStartPosition,
             origin = input.origin,
             rawAction = input.rawAction
         )
 
-        return if (input.startIndex in sources.indices) {
+        return if (selectedIndex == input.startIndex) {
             LaunchOutcome.Ready(
-                request = baseRequest,
-                selectedIndex = input.startIndex,
+                request = normalizedRequest,
+                selectedIndex = selectedIndex,
                 effectiveStartPositionMs = safeStartPosition
             )
         } else {
             LaunchOutcome.FallbackSelected(
-                request = baseRequest.copy(startIndex = 0),
-                selectedIndex = 0,
+                request = normalizedRequest,
+                selectedIndex = selectedIndex,
                 effectiveStartPositionMs = safeStartPosition,
                 messageResId = R.string.player_launch_error_invalid_index
             )

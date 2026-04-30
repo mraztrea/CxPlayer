@@ -1,2 +1,17 @@
 /my-translator
 /decompiled
+.gradle/
+.idea/
+.vscode/
+**/build/
+**/out/
+*.class
+*.jar
+*.iml
+*.log
+*.tmp
+*.swp
+.env*
+Thumbs.db
+.DS_Store
+CxPlayer/local.properties

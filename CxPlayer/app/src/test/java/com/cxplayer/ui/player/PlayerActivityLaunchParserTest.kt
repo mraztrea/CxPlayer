@@ -57,7 +57,7 @@ class PlayerActivityLaunchParserTest {
     }
 
     @Test
-    fun `fromInput falls back to first source when start index is invalid`() {
+    fun `fromInput clamps overflow start index to the nearest valid source`() {
         val outcome = PlaybackRequestParser.fromInput(
             LaunchRequestInput(
                 sources = listOf(
@@ -73,8 +73,51 @@ class PlayerActivityLaunchParserTest {
 
         assertTrue(outcome is LaunchOutcome.FallbackSelected)
         val fallback = outcome as LaunchOutcome.FallbackSelected
-        assertEquals(0, fallback.selectedIndex)
+        assertEquals(1, fallback.selectedIndex)
+        assertEquals(1, fallback.request.startIndex)
         assertEquals(R.string.player_launch_error_invalid_index, fallback.messageResId)
+    }
+
+    @Test
+    fun `fromInput clamps underflow start index to zero`() {
+        val outcome = PlaybackRequestParser.fromInput(
+            LaunchRequestInput(
+                sources = listOf(
+                    LaunchSourceCandidate("https://example.com/alpha.mp4", null, true),
+                    LaunchSourceCandidate("https://example.com/beta.webm", null, true)
+                ),
+                startIndex = -3,
+                startPositionMs = 0L,
+                origin = LaunchOrigin.InternalExplicit,
+                rawAction = null
+            )
+        )
+
+        assertTrue(outcome is LaunchOutcome.FallbackSelected)
+        val fallback = outcome as LaunchOutcome.FallbackSelected
+        assertEquals(0, fallback.selectedIndex)
+        assertEquals(0, fallback.request.startIndex)
+        assertEquals(R.string.player_launch_error_invalid_index, fallback.messageResId)
+    }
+
+    @Test
+    fun `fromInput resets negative start position to zero`() {
+        val outcome = PlaybackRequestParser.fromInput(
+            LaunchRequestInput(
+                sources = listOf(
+                    LaunchSourceCandidate("https://example.com/alpha.mp4", null, true)
+                ),
+                startIndex = 0,
+                startPositionMs = -1_500L,
+                origin = LaunchOrigin.InternalExplicit,
+                rawAction = null
+            )
+        )
+
+        assertTrue(outcome is LaunchOutcome.Ready)
+        val ready = outcome as LaunchOutcome.Ready
+        assertEquals(0L, ready.effectiveStartPositionMs)
+        assertEquals(0L, ready.request.startPositionMs)
     }
 
     @Test
@@ -124,6 +167,26 @@ class PlayerActivityLaunchParserTest {
                 startPositionMs = 0L,
                 origin = LaunchOrigin.ExternalImplicit,
                 rawAction = "android.intent.action.VIEW"
+            )
+        )
+
+        assertTrue(outcome is LaunchOutcome.Rejected)
+        val rejected = outcome as LaunchOutcome.Rejected
+        assertEquals(R.string.player_launch_error_unsupported_source, rejected.messageResId)
+    }
+
+    @Test
+    fun `fromInput rejects when all provided sources are filtered out`() {
+        val outcome = PlaybackRequestParser.fromInput(
+            LaunchRequestInput(
+                sources = listOf(
+                    LaunchSourceCandidate("ftp://example.com/invalid.txt", null, true),
+                    LaunchSourceCandidate("file:///definitely-missing-video.mp4", null, false)
+                ),
+                startIndex = 0,
+                startPositionMs = 0L,
+                origin = LaunchOrigin.InternalExplicit,
+                rawAction = null
             )
         )
 
