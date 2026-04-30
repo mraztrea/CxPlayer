@@ -241,16 +241,32 @@ class PlayerActivity : AppCompatActivity() {
         seekBar.isEnabled = false
         seekBar.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = Unit
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) {
+                        return
+                    }
+
+                    currentTimeView.text = formatPlaybackTime(progress.toLong())
+                }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val targetPosition = seekBar?.progress?.toLong() ?: return
+                    seekToPosition(targetPosition)
+                }
             }
         )
-        seekBackButton.setOnClickListener { }
-        playPauseButton.setOnClickListener { }
-        seekForwardButton.setOnClickListener { }
+        seekBackButton.setOnClickListener { seekBack() }
+        playPauseButton.setOnClickListener {
+            val state = playerManager.currentState()
+            if (state.hasActiveSession && state.playWhenReady) {
+                pausePlayback()
+            } else {
+                playPlayback()
+            }
+        }
+        seekForwardButton.setOnClickListener { seekForward() }
         volumeButton.setOnClickListener { }
         settingsButton.setOnClickListener { }
         updateBottomChrome()
