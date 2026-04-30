@@ -277,7 +277,9 @@ class PlayerActivity : AppCompatActivity() {
         backButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
-        overflowButton.setOnClickListener { }
+        overflowButton.setOnClickListener {
+            showMessage(R.string.player_control_not_available_yet)
+        }
     }
 
     private fun initializeBottomChrome() {
@@ -288,18 +290,38 @@ class PlayerActivity : AppCompatActivity() {
         seekBar.isEnabled = false
         seekBar.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = Unit
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) {
+                        return
+                    }
+
+                    currentTimeView.text = formatPlaybackTime(progress.toLong())
+                }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
-                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val targetPosition = seekBar?.progress?.toLong() ?: return
+                    seekToPosition(targetPosition)
+                }
             }
         )
-        seekBackButton.setOnClickListener { }
-        playPauseButton.setOnClickListener { }
-        seekForwardButton.setOnClickListener { }
-        volumeButton.setOnClickListener { }
-        settingsButton.setOnClickListener { }
+        seekBackButton.setOnClickListener { seekBack() }
+        playPauseButton.setOnClickListener {
+            val currentState = playerManager.currentState()
+            if (currentState.hasActiveSession && currentState.playWhenReady) {
+                pausePlayback()
+            } else {
+                playPlayback()
+            }
+        }
+        seekForwardButton.setOnClickListener { seekForward() }
+        volumeButton.setOnClickListener {
+            showMessage(R.string.player_control_not_available_yet)
+        }
+        settingsButton.setOnClickListener {
+            showMessage(R.string.player_control_not_available_yet)
+        }
         updateBottomChrome()
     }
 

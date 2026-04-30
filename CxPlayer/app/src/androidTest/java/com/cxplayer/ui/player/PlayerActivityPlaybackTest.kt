@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.view.View
+import android.widget.ImageButton
 import androidx.annotation.IdRes
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -72,6 +73,45 @@ class PlayerActivityPlaybackTest {
                 val snapshot = activity.currentPlaybackSnapshot()
                 assertNotNull(snapshot)
                 assertEquals(0, snapshot?.currentIndex)
+            }
+        }
+    }
+
+    @Test
+    fun transportButtonsControlPlaybackSession() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                val playPauseButton = activity.findViewById<ImageButton>(R.id.playerPlayPauseButton)
+                val seekForwardButton = activity.findViewById<ImageButton>(R.id.playerSeekForwardButton)
+                val seekBackButton = activity.findViewById<ImageButton>(R.id.playerSeekBackButton)
+
+                val initialSnapshot = activity.currentPlaybackSnapshot()
+                assertNotNull(initialSnapshot)
+                assertTrue(initialSnapshot?.playWhenReady ?: false)
+
+                assertTrue(playPauseButton.performClick())
+                val pausedSnapshot = activity.currentPlaybackSnapshot()
+                assertNotNull(pausedSnapshot)
+                assertFalse(pausedSnapshot?.playWhenReady ?: true)
+
+                val pausedPosition = pausedSnapshot?.currentPositionMs ?: 0L
+                assertTrue(seekForwardButton.performClick())
+                val afterForwardSnapshot = activity.currentPlaybackSnapshot()
+                assertNotNull(afterForwardSnapshot)
+                assertTrue((afterForwardSnapshot?.currentPositionMs ?: 0L) >= pausedPosition)
+
+                assertTrue(seekBackButton.performClick())
+                val afterBackSnapshot = activity.currentPlaybackSnapshot()
+                assertNotNull(afterBackSnapshot)
+                assertTrue(
+                    (afterBackSnapshot?.currentPositionMs ?: 0L) <=
+                        (afterForwardSnapshot?.currentPositionMs ?: Long.MAX_VALUE)
+                )
+
+                assertTrue(playPauseButton.performClick())
+                val resumedSnapshot = activity.currentPlaybackSnapshot()
+                assertNotNull(resumedSnapshot)
+                assertTrue(resumedSnapshot?.playWhenReady ?: false)
             }
         }
     }

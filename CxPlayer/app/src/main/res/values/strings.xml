@@ -5,6 +5,7 @@
     <string name="player_launch_error_invalid_index">Không tìm thấy mục bắt đầu, đã chuyển về video đầu tiên.</string>
     <string name="player_launch_message_restored_session">Đã khôi phục phiên phát trước đó.</string>
     <string name="player_launch_error_restore_failed">Không thể khôi phục video trước đó vì nguồn phát không còn khả dụng.</string>
+    <string name="player_control_not_available_yet">Tính năng này sẽ được hỗ trợ ở bước tiếp theo.</string>
     <string name="player_title_fallback">Đang phát video</string>
     <string name="player_back_content_description">Quay lại</string>
     <string name="player_overflow_content_description">Tùy chọn phát</string>
