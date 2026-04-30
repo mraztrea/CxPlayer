@@ -13,4 +13,10 @@
     <string name="player_volume_content_description">Âm lượng</string>
     <string name="player_settings_content_description">Cài đặt phát</string>
     <string name="player_time_placeholder">--:--</string>
+    <string name="player_gesture_overlay_volume_label">Âm lượng</string>
+    <string name="player_gesture_overlay_brightness_label">Độ sáng</string>
+    <string name="player_gesture_overlay_seek_forward_label">Tua tiến</string>
+    <string name="player_gesture_overlay_seek_backward_label">Tua lùi</string>
+    <string name="player_gesture_overlay_fast_forward_label">Tua nhanh</string>
+    <string name="player_gesture_overlay_fast_forward_value">2X</string>
 </resources>

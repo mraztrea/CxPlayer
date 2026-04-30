@@ -6,6 +6,8 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.SeekBar
@@ -28,6 +30,7 @@ import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Locale
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private const val STATE_PLAYBACK_INDEX = "state_playback_index"
 private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
@@ -43,9 +46,12 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var topRegion: ViewGroup
     private lateinit var timelineRow: ViewGroup
     private lateinit var transportRow: ViewGroup
+    private lateinit var gestureOverlay: ViewGroup
     private lateinit var backButton: ImageButton
     private lateinit var titleView: TextView
     private lateinit var overflowButton: ImageButton
+    private lateinit var gestureOverlayCueView: TextView
+    private lateinit var gestureOverlayValueView: TextView
     private lateinit var currentTimeView: TextView
     private lateinit var durationView: TextView
     private lateinit var seekBar: SeekBar
@@ -62,6 +68,13 @@ class PlayerActivity : AppCompatActivity() {
     private var bottomSystemInsetPx: Int = 0
     private var currentWindowBrightness: Float = 0.5f
     private var currentZoomScale: Float = 1f
+    private var currentGestureOverlayState: GestureOverlayState? = null
+    private val hideGestureOverlayRunnable = Runnable {
+        currentGestureOverlayState = null
+        if (::gestureOverlay.isInitialized) {
+            gestureOverlay.visibility = View.GONE
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +87,7 @@ class PlayerActivity : AppCompatActivity() {
         setVolumeControlStream(AudioManager.STREAM_MUSIC)
         initializeTopChrome()
         initializeBottomChrome()
+        initializeGestureOverlay()
         initializeChromeLayoutBehavior()
         initializeGestureController()
         pendingSnapshot = restoreSnapshot(savedInstanceState)
@@ -118,6 +132,9 @@ class PlayerActivity : AppCompatActivity() {
         if (::gestureController.isInitialized) {
             gestureController.release()
         }
+        if (::gestureOverlay.isInitialized) {
+            gestureOverlay.removeCallbacks(hideGestureOverlayRunnable)
+        }
         playerManager.release()
         super.onDestroy()
     }
@@ -158,6 +175,15 @@ class PlayerActivity : AppCompatActivity() {
     internal fun currentPlayerZoomScale(): Float = currentZoomScale
 
     internal fun currentMusicStreamVolume(): Int = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+    internal fun isGestureOverlayVisible(): Boolean =
+        ::gestureOverlay.isInitialized && gestureOverlay.visibility == View.VISIBLE
+
+    internal fun currentGestureOverlayCue(): String =
+        if (::gestureOverlayCueView.isInitialized) gestureOverlayCueView.text.toString() else ""
+
+    internal fun currentGestureOverlayValue(): String =
+        if (::gestureOverlayValueView.isInitialized) gestureOverlayValueView.text.toString() else ""
 
     internal fun hasChromeSkeleton(): Boolean =
         ::topChrome.isInitialized &&
@@ -234,9 +260,12 @@ class PlayerActivity : AppCompatActivity() {
         topRegion = binding.playerTopRegion
         timelineRow = binding.playerTimelineRow
         transportRow = binding.playerTransportRow
+        gestureOverlay = binding.playerGestureOverlay
         backButton = binding.playerBackButton
         titleView = binding.playerTitleView
         overflowButton = binding.playerOverflowButton
+        gestureOverlayCueView = binding.playerGestureOverlayCueView
+        gestureOverlayValueView = binding.playerGestureOverlayValueView
         currentTimeView = binding.playerCurrentTimeView
         durationView = binding.playerDurationView
         seekBar = binding.playerSeekBar
@@ -292,6 +321,12 @@ class PlayerActivity : AppCompatActivity() {
         volumeButton.setOnClickListener { }
         settingsButton.setOnClickListener { }
         updateBottomChrome()
+    }
+
+    private fun initializeGestureOverlay() {
+        gestureOverlay.visibility = View.GONE
+        gestureOverlayCueView.text = ""
+        gestureOverlayValueView.text = ""
     }
 
     private fun initializeGestureController() {
@@ -370,6 +405,9 @@ class PlayerActivity : AppCompatActivity() {
         val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         val targetVolume = (currentVolume + volumeStep).coerceIn(0, maxVolume)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        showGestureOverlay(
+            GestureOverlayModel.formatVolume(resolvePercent(targetVolume, maxVolume))
+        )
     }
 
     private fun applyBrightnessDelta(delta: Float) {
@@ -377,6 +415,9 @@ class PlayerActivity : AppCompatActivity() {
         window.attributes = window.attributes.apply {
             screenBrightness = currentWindowBrightness
         }
+        showGestureOverlay(
+            GestureOverlayModel.formatBrightness((currentWindowBrightness * 100f).roundToInt())
+        )
     }
 
     private fun applySeekDelta(deltaMs: Long) {
@@ -385,7 +426,11 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        seekToPosition(state.currentPositionMs + deltaMs)
+        val maxPosition = state.durationMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+        val targetPosition = (state.currentPositionMs + deltaMs).coerceIn(0L, maxPosition)
+        val appliedDelta = targetPosition - state.currentPositionMs
+        seekToPosition(targetPosition)
+        showGestureOverlay(GestureOverlayModel.formatSeekDelta(appliedDelta))
     }
 
     private fun togglePlayback() {
@@ -399,10 +444,21 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun startTemporaryFastForward(speed: Float) {
         playerManager.setPlaybackSpeed(speed)
+        showGestureOverlay(GestureOverlayModel.fastForwardActive(speedLabel = "2X"))
     }
 
     private fun endTemporaryFastForward() {
         playerManager.resetPlaybackSpeed()
+        currentGestureOverlayState
+            ?.takeIf { it.type == GestureOverlayType.FastForward }
+            ?.let { overlayState ->
+                showGestureOverlay(
+                    GestureOverlayModel.scheduleDismiss(
+                        current = overlayState,
+                        updatedAtMs = SystemClock.uptimeMillis()
+                    )
+                )
+            }
     }
 
     private fun applyZoomFactor(scaleFactor: Float) {
@@ -509,6 +565,43 @@ class PlayerActivity : AppCompatActivity() {
             playerView.player = null
         }
         updateBottomChrome()
+    }
+
+    private fun showGestureOverlay(state: GestureOverlayState) {
+        val resolvedState = GestureOverlayModel.replace(currentGestureOverlayState, state)
+        currentGestureOverlayState = resolvedState
+        gestureOverlay.removeCallbacks(hideGestureOverlayRunnable)
+        gestureOverlayCueView.text = resolveGestureOverlayCueText(resolvedState)
+        gestureOverlayValueView.text = resolvedState.valueText
+        gestureOverlay.visibility = if (resolvedState.isVisible) View.VISIBLE else View.GONE
+
+        if (!resolvedState.isStickyWhileGestureActive) {
+            val dismissDelayMs = resolvedState.dismissDeadlineMs
+                ?.let { deadline -> (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0L) }
+                ?: GESTURE_OVERLAY_AUTO_DISMISS_DELAY_MS
+            gestureOverlay.postDelayed(hideGestureOverlayRunnable, dismissDelayMs)
+        }
+    }
+
+    private fun resolveGestureOverlayCueText(state: GestureOverlayState): String {
+        return when (state.type) {
+            GestureOverlayType.Volume -> getString(R.string.player_gesture_overlay_volume_label)
+            GestureOverlayType.Brightness -> getString(R.string.player_gesture_overlay_brightness_label)
+            GestureOverlayType.SeekDelta -> if (state.valueText.startsWith("-")) {
+                getString(R.string.player_gesture_overlay_seek_backward_label)
+            } else {
+                getString(R.string.player_gesture_overlay_seek_forward_label)
+            }
+
+            GestureOverlayType.FastForward -> getString(R.string.player_gesture_overlay_fast_forward_label)
+        }
+    }
+
+    private fun resolvePercent(value: Int, maxValue: Int): Int {
+        if (maxValue <= 0) {
+            return 0
+        }
+        return ((value.toFloat() / maxValue.toFloat()) * 100f).roundToInt().coerceIn(0, 100)
     }
 
     private fun resolveWindowBrightness(): Float {

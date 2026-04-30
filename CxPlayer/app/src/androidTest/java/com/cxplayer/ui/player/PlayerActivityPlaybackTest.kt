@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.ImageButton
+import android.widget.TextView
 import androidx.annotation.IdRes
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -216,6 +217,7 @@ class PlayerActivityPlaybackTest {
                     assertEquals(expectedVolume, activity.currentMusicStreamVolume())
                     assertEquals(expectedBrightness, activity.currentGestureBrightness(), 0.0001f)
                     assertEquals(expectedPosition, requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs)
+                    assertGestureOverlay(activity, cue = "Tua tiến", value = "+00:36")
                 }
             } finally {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
@@ -263,6 +265,7 @@ class PlayerActivityPlaybackTest {
 
             scenario.onActivity { activity ->
                 assertEquals(2f, activity.currentPlaybackState().playbackSpeed, 0f)
+                assertGestureOverlay(activity, cue = "Tua nhanh", value = "2X")
                 dispatchSinglePointerEvent(
                     view = requireView(activity, R.id.playerView),
                     action = MotionEvent.ACTION_UP,
@@ -273,9 +276,24 @@ class PlayerActivityPlaybackTest {
                 )
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            waitForOverlayDismiss()
 
             scenario.onActivity { activity ->
                 assertEquals(1f, activity.currentPlaybackState().playbackSpeed, 0f)
+                assertFalse(activity.isGestureOverlayVisible())
+            }
+        }
+    }
+
+    @Test
+    fun gestureOverlayReplacesPreviousContentInsteadOfStackingCards() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                dispatchSwipe(activity, R.id.playerView, 0.8f, 0.8f, 0.8f, 0.2f)
+                assertGestureOverlay(activity, cue = "Âm lượng", value = "80%")
+
+                dispatchSwipe(activity, R.id.playerView, 0.25f, 0.5f, 0.55f, 0.5f)
+                assertGestureOverlay(activity, cue = "Tua tiến", value = "+00:36")
             }
         }
     }
@@ -342,6 +360,23 @@ class PlayerActivityPlaybackTest {
         val view = requireView(activity, viewId)
         assertTrue(view is android.widget.TextView)
         assertTrue((view as android.widget.TextView).text.toString().isNotBlank())
+    }
+
+    private fun assertTextEquals(activity: PlayerActivity, @IdRes viewId: Int, expected: String) {
+        val view = requireView(activity, viewId)
+        assertTrue(view is TextView)
+        assertEquals(expected, (view as TextView).text.toString())
+    }
+
+    private fun assertGestureOverlay(activity: PlayerActivity, cue: String, value: String) {
+        assertTrue(activity.isGestureOverlayVisible())
+        assertEquals(cue, activity.currentGestureOverlayCue())
+        assertEquals(value, activity.currentGestureOverlayValue())
+    }
+
+    private fun waitForOverlayDismiss(delayMs: Long = 1_050L) {
+        SystemClock.sleep(delayMs)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
     private fun dispatchSwipe(

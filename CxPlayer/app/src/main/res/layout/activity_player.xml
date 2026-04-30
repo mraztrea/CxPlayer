@@ -15,6 +15,40 @@
         app:use_controller="false" />
 
     <LinearLayout
+        android:id="@+id/playerGestureOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_player_gesture_overlay"
+        android:clickable="false"
+        android:focusable="false"
+        android:gravity="center"
+        android:minWidth="@dimen/player_gesture_overlay_min_width"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/player_gesture_overlay_padding_horizontal"
+        android:paddingTop="@dimen/player_gesture_overlay_padding_vertical"
+        android:paddingEnd="@dimen/player_gesture_overlay_padding_horizontal"
+        android:paddingBottom="@dimen/player_gesture_overlay_padding_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/playerGestureOverlayCueView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/player_gesture_overlay_cue_text_size" />
+
+        <TextView
+            android:id="@+id/playerGestureOverlayValueView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/player_gesture_overlay_spacing"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/player_gesture_overlay_value_text_size"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/playerTopChrome"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

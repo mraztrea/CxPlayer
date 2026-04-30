@@ -21,4 +21,10 @@
     <dimen name="player_transport_button_spacing">12dp</dimen>
     <dimen name="player_transport_secondary_spacing">4dp</dimen>
     <dimen name="player_compact_height_threshold">480dp</dimen>
+    <dimen name="player_gesture_overlay_min_width">144dp</dimen>
+    <dimen name="player_gesture_overlay_padding_horizontal">20dp</dimen>
+    <dimen name="player_gesture_overlay_padding_vertical">16dp</dimen>
+    <dimen name="player_gesture_overlay_spacing">6dp</dimen>
+    <dimen name="player_gesture_overlay_cue_text_size">13sp</dimen>
+    <dimen name="player_gesture_overlay_value_text_size">22sp</dimen>
 </resources>
