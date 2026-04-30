@@ -16,9 +16,9 @@ Tài liệu này mô tả contract cấp feature giữa media input profile, ch�
 | Concern | Contract |
 |---------|----------|
 | Media3 version alignment | Playback policy hiện bám Media3 `1.10.0`; nếu bổ sung FFmpeg extension local trong tương lai thì extension đó phải tương thích cùng phiên bản Media3 đang dùng |
-| Module scope | Tích hợp chỉ chạm `CxPlayer/app` và không thêm module Android mới |
+| Module scope | Tích hợp thêm Android library module `CxPlayer/ffmpeg-extension` để bọc native FFmpeg có sẵn mà không đổi public API của `CxPlayer/app` |
 | User-facing settings | Không tạo toggle UI mới để người dùng bật hoặc tắt FFmpeg |
-| FFmpeg packaging | FFmpeg decoder không có sẵn qua Maven repo chuẩn của dự án; runtime FFmpeg chỉ khả dụng khi app có thêm extension module local đã build và có mặt trên classpath |
+| FFmpeg packaging | FFmpeg decoder không có sẵn qua Maven repo chuẩn của dự án; runtime FFmpeg hiện đi qua local module `:ffmpeg-extension` và reuse native libs từ `video_player_module/native_libs` |
 
 ## Renderer Selection Contract
 
@@ -56,5 +56,5 @@ Tài liệu này mô tả contract cấp feature giữa media input profile, ch�
 
 ## Current Limitation
 
-- Implementation hiện tại đã khóa playback policy ở mức `CxRenderersFactory` và `CxPlayerManager`, nhưng chưa thể chứng minh runtime FFmpeg decoder được chọn cho codec mục tiêu vì repo chưa có Media3 FFmpeg extension module khả dụng để `DefaultRenderersFactory` nạp thật.
-- Khi extension local được bổ sung đúng cách, contract renderer selection bên trên phải tiếp tục giữ nguyên mà không cần đổi API người dùng.
+- Implementation hiện tại đã đưa local module `:ffmpeg-extension` lên app classpath để `DefaultRenderersFactory` có thể nạp `androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer` thật.
+- Điều chưa được chứng minh xong là manual codec matrix trên sample mục tiêu: compile pass và classpath wiring đã ổn, nhưng vẫn cần test runtime với media AC3, DTS, H.265 hoặc sample fallback thực tế để xác nhận bridge JNI hoạt động đúng với mọi codec mục tiêu.

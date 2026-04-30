@@ -265,8 +265,9 @@ private class ExoPlayerSessionFactory(
 ) : PlayerSessionFactory {
     override fun create(): PlayerSession {
         val configuration = playerSessionConfigurationSnapshot()
+        val renderersFactory = CxRenderersFactory(context)
         val exoPlayer = ExoPlayer.Builder(context)
-            .setRenderersFactory(CxRenderersFactory(context))
+            .setRenderersFactory(renderersFactory)
             .setSeekBackIncrementMs(configuration.seekBackIncrementMs)
             .setSeekForwardIncrementMs(configuration.seekForwardIncrementMs)
             .build()

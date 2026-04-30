@@ -6,20 +6,24 @@ Mở rộng playback stack hiện tại để Media3 có thể ưu tiên FFmpeg 
 
 ## Cách triển khai đề xuất
 
-1. Cập nhật dependency management trong `CxPlayer/gradle/libs.versions.toml` và `CxPlayer/app/build.gradle.kts`:
-   - thêm alias cho `androidx.media3:media3-decoder-ffmpeg`
-   - dùng cùng `version.ref = "media3"` với các module Media3 hiện có
-2. Thêm `CxPlayer/app/src/main/java/com/cxplayer/player/CxRenderersFactory.kt`:
+1. Đăng ký local module trong `CxPlayer/settings.gradle.kts`, `CxPlayer/build.gradle.kts` và `CxPlayer/gradle/libs.versions.toml`:
+   - thêm module `:ffmpeg-extension`
+   - cho phép Android library plugin dùng cùng phiên bản AGP hiện tại
+2. Dựng `CxPlayer/ffmpeg-extension/` làm Android library dùng lại native `.so` từ `video_player_module/native_libs`:
+   - expose `androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer` để `DefaultRenderersFactory` có thể nạp bằng reflection
+   - giữ bridge JNI ở package `com.google.android.exoplayer2.ext.ffmpeg` vì các `.so` hiện có export symbol theo package cũ này
+3. Thêm `CxPlayer/app/src/main/java/com/cxplayer/player/CxRenderersFactory.kt`:
    - kế thừa `DefaultRenderersFactory`
    - cấu hình extension renderer mode ở mức ưu tiên extension
    - bật decoder fallback để giảm hard failure khi codec hợp lệ cần đường thay thế
-3. Cập nhật `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`:
+4. Cập nhật `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`:
    - chỉ thay ở `ExoPlayerSessionFactory.create()` để truyền `CxRenderersFactory` vào `ExoPlayer.Builder`
    - giữ nguyên seek increments, lifecycle và public API của `CxPlayerManager`
-4. Bổ sung test tại `CxPlayer/app/src/test/java/com/cxplayer/player/`:
+5. Bổ sung test tại `CxPlayer/app/src/test/java/com/cxplayer/player/`:
    - khóa việc session factory tiếp tục giữ seek increments cũ sau khi wiring renderers factory mới
+   - khóa việc local module thực sự nằm trên app classpath
    - khóa các regression dễ thấy ở public contract của `CxPlayerManager` nếu test seam hiện có cho phép
-5. Chuẩn bị manual verification với sample media:
+6. Chuẩn bị manual verification với sample media:
    - một file MKV có DTS hoặc AC3
    - một file H.265 cần fallback hợp lệ
    - một regression sample MP4 hoặc MKV đang phát tốt từ phase trước
@@ -54,8 +58,9 @@ Ghi chú:
 ## Implementation Note
 
 - `CxRenderersFactory` hiện đã được nối vào `ExoPlayer.Builder` và cấu hình `EXTENSION_RENDERER_MODE_PREFER` cùng decoder fallback.
-- Tài liệu chính thức của Media3 xác nhận `decoder_ffmpeg` không được publish qua Google Maven hoặc Maven Central; muốn FFmpeg thực sự được dùng ở runtime thì repo phải cung cấp một FFmpeg extension module local đã build sẵn trên classpath của app.
-- Repo hiện có dấu vết native FFmpeg dưới `video_player_module/`, nhưng chưa có module Android tương thích Media3 để `:app` phụ thuộc trực tiếp. Vì vậy validation compile và unit test hiện khóa được playback policy và regression behavior, còn manual codec matrix chỉ pass đầy đủ sau khi FFmpeg extension local được tích hợp thật.
+- Tài liệu chính thức của Media3 xác nhận `decoder_ffmpeg` không được publish qua Google Maven hoặc Maven Central; implementation hiện tại đã thay bằng local module `:ffmpeg-extension`.
+- Local module này dùng lại native `.so` từ `video_player_module/native_libs` và bridge JNI theo package cũ `com.google.android.exoplayer2.ext.ffmpeg`, trong khi vẫn expose renderer package `androidx.media3.decoder.ffmpeg` để Media3 nạp được qua `DefaultRenderersFactory`.
+- Validation compile và unit test hiện đã khóa được việc module nằm trên app classpath. Manual codec matrix vẫn là bước cần làm tiếp để chứng minh decoder runtime thực sự được chọn cho từng sample mục tiêu.
 
 ## Out of Scope For This Feature
 

@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CxPlayer"
 include(":app")
+include(":ffmpeg-extension")

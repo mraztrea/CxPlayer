@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.androidx.media3.datasource)
     implementation(libs.androidx.media3.extractor)
     implementation(libs.androidx.media3.session)
+    implementation(project(":ffmpeg-extension"))
 
     // Hilt DI (Phase 1)
     implementation(libs.hilt.android)

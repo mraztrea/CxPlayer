@@ -15,10 +15,10 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Chuẩn bị dependency và build wiring cho FFmpeg extension trước khi chạm vào playback code
+**Purpose**: Chuẩn bị local module và build wiring cho FFmpeg extension trước khi chạm vào playback code
 
-- [ ] T001 [P] Add Media3 FFmpeg decoder alias to `CxPlayer/gradle/libs.versions.toml`
-- [ ] T002 [P] Wire the FFmpeg decoder dependency into `CxPlayer/app/build.gradle.kts`
+- [X] T001 [P] Register the local FFmpeg extension module in `CxPlayer/settings.gradle.kts` and `CxPlayer/gradle/libs.versions.toml`
+- [X] T002 [P] Wire the local FFmpeg extension through `CxPlayer/build.gradle.kts`, `CxPlayer/ffmpeg-extension/build.gradle.kts`, and `CxPlayer/app/build.gradle.kts`
 
 ---
 
@@ -102,7 +102,7 @@
 
 - [X] T018 [P] Run unit and assemble validation referenced by `specs/006-ffmpeg-integration/quickstart.md` against `CxPlayer/app/src/test/java/com/cxplayer/player/CxPlayerManagerTest.kt` and `CxPlayer/app/build.gradle.kts`
 - [ ] T019 Run androidTest compile and manual codec matrix verification from `specs/006-ffmpeg-integration/quickstart.md`
-- [ ] T020 Clean up unused imports, constants, and temporary playback wiring in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt` and `CxPlayer/app/src/main/java/com/cxplayer/player/CxRenderersFactory.kt`
+- [X] T020 Clean up unused imports, constants, and temporary playback wiring in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt` and `CxPlayer/app/src/main/java/com/cxplayer/player/CxRenderersFactory.kt`
 
 ---
 

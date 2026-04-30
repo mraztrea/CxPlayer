@@ -34,6 +34,13 @@ class CxPlayerManagerTest {
     }
 
     @Test
+    fun `ffmpeg renderer module is available on the app classpath`() {
+        val rendererClass = Class.forName("androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer")
+
+        assertEquals("androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer", rendererClass.name)
+    }
+
+    @Test
     fun `load creates a single session until release`() {
         val factory = FakePlayerSessionFactory()
         val manager = CxPlayerManager(factory)

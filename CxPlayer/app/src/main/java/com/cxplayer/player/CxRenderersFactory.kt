@@ -15,7 +15,7 @@ internal fun cxRendererPolicySnapshot(): RendererPolicySnapshot {
     )
 }
 
-class CxRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
+internal class CxRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
     init {
         val policy = cxRendererPolicySnapshot()
         setExtensionRendererMode(policy.extensionRendererMode)
