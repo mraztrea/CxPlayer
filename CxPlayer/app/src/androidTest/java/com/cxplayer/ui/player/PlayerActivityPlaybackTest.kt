@@ -184,8 +184,15 @@ class PlayerActivityPlaybackTest {
             var originalVolume = 0
             var baselineBrightness = 0f
             var baselinePosition = 0L
+            var expectedVolume = 0
+            var expectedBrightness = 0f
+            var expectedPosition = 0L
 
             scenario.onActivity { activity ->
+                val playerView = requireView(activity, R.id.playerView)
+                val verticalSwipeDistancePx = playerView.height * 0.6f
+                val horizontalSwipeDistancePx = playerView.width * 0.3f
+                val expectedVerticalSteps = (verticalSwipeDistancePx / 150f).toInt()
                 val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 originalVolume = activity.currentMusicStreamVolume()
                 baselineVolume = (maxVolume / 2).coerceAtLeast(1)
@@ -193,6 +200,10 @@ class PlayerActivityPlaybackTest {
 
                 baselineBrightness = activity.currentGestureBrightness()
                 baselinePosition = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                expectedVolume = (baselineVolume + expectedVerticalSteps).coerceIn(0, maxVolume)
+                expectedBrightness = (baselineBrightness + (expectedVerticalSteps * 0.05f))
+                    .coerceIn(0.05f, 1f)
+                expectedPosition = baselinePosition + (horizontalSwipeDistancePx * 100f).toLong()
 
                 dispatchSwipe(activity, R.id.playerView, 0.8f, 0.8f, 0.8f, 0.2f)
                 dispatchSwipe(activity, R.id.playerView, 0.2f, 0.8f, 0.2f, 0.2f)
@@ -202,9 +213,9 @@ class PlayerActivityPlaybackTest {
 
             try {
                 scenario.onActivity { activity ->
-                    assertTrue(activity.currentMusicStreamVolume() > baselineVolume)
-                    assertTrue(activity.currentGestureBrightness() > baselineBrightness)
-                    assertTrue(requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs > baselinePosition)
+                    assertEquals(expectedVolume, activity.currentMusicStreamVolume())
+                    assertEquals(expectedBrightness, activity.currentGestureBrightness(), 0.0001f)
+                    assertEquals(expectedPosition, requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs)
                 }
             } finally {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
@@ -271,18 +282,27 @@ class PlayerActivityPlaybackTest {
 
     @Test
     fun surfacePinchGestureUpdatesPlayerZoomScale() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val audioManager = context.getSystemService(AudioManager::class.java)
+
         ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
             var baselinePosition = 0L
+            var baselineBrightness = 0f
+            var baselineVolume = 0
 
             scenario.onActivity { activity ->
                 baselinePosition = requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs
+                baselineBrightness = activity.currentGestureBrightness()
+                baselineVolume = activity.currentMusicStreamVolume()
                 dispatchPinch(activity, R.id.playerView, startDistanceFraction = 0.08f, endDistanceFraction = 0.22f)
             }
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
 
             scenario.onActivity { activity ->
-                assertTrue(activity.currentPlayerZoomScale() > 1f)
+                assertTrue(activity.currentPlayerZoomScale() in 1f..3f)
                 assertEquals(baselinePosition, requireNotNull(activity.currentPlaybackSnapshot()).currentPositionMs)
+                assertEquals(baselineBrightness, activity.currentGestureBrightness(), 0.0001f)
+                assertEquals(baselineVolume, activity.currentMusicStreamVolume())
             }
         }
     }

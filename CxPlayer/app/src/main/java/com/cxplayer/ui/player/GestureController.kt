@@ -9,10 +9,13 @@ import kotlin.math.abs
 
 private const val DEFAULT_DIRECTION_LOCK_DISTANCE_PX = 24f
 private const val DEFAULT_VERTICAL_STEP_DISTANCE_PX = 150f
+private const val DEFAULT_VOLUME_STEP_DELTA = 1f
 private const val DEFAULT_BRIGHTNESS_STEP_DELTA = 0.05f
 private const val DEFAULT_SEEK_MS_PER_PX = 100L
 private const val DEFAULT_DOUBLE_TAP_SEEK_DELTA_MS = 10_000L
 private const val DEFAULT_FAST_FORWARD_SPEED = 2f
+private const val DEFAULT_MIN_ZOOM_SCALE = 1f
+private const val DEFAULT_MAX_ZOOM_SCALE = 3f
 
 class GestureController(
     private val playerView: PlayerView,
@@ -161,10 +164,13 @@ internal enum class GestureTapZone {
 internal data class GestureThresholdProfile(
     val directionLockDistancePx: Float = DEFAULT_DIRECTION_LOCK_DISTANCE_PX,
     val verticalStepDistancePx: Float = DEFAULT_VERTICAL_STEP_DISTANCE_PX,
+    val volumeStepDelta: Float = DEFAULT_VOLUME_STEP_DELTA,
     val brightnessStepDelta: Float = DEFAULT_BRIGHTNESS_STEP_DELTA,
     val seekMsPerPixel: Long = DEFAULT_SEEK_MS_PER_PX,
     val doubleTapSeekDeltaMs: Long = DEFAULT_DOUBLE_TAP_SEEK_DELTA_MS,
-    val fastForwardSpeed: Float = DEFAULT_FAST_FORWARD_SPEED
+    val fastForwardSpeed: Float = DEFAULT_FAST_FORWARD_SPEED,
+    val minZoomScale: Float = DEFAULT_MIN_ZOOM_SCALE,
+    val maxZoomScale: Float = DEFAULT_MAX_ZOOM_SCALE
 )
 
 internal data class GestureSessionState(
@@ -286,7 +292,11 @@ internal class GestureSessionController(
         }
 
         state = state?.copy(pinchInProgress = true, lockedAxis = null)
-        sink.onZoom(scaleFactor)
+        val boundedScaleFactor = scaleFactor.coerceIn(
+            thresholdProfile.minZoomScale,
+            thresholdProfile.maxZoomScale
+        )
+        sink.onZoom(boundedScaleFactor)
         return true
     }
 
@@ -308,7 +318,9 @@ internal class GestureSessionController(
                     deltaSteps * thresholdProfile.brightnessStepDelta
                 )
 
-                GestureHalfZone.Right -> sink.onVolumeDelta(deltaSteps.toFloat())
+                GestureHalfZone.Right -> sink.onVolumeDelta(
+                    deltaSteps * thresholdProfile.volumeStepDelta
+                )
             }
         }
 

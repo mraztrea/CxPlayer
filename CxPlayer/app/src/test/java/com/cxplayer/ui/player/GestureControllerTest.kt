@@ -117,6 +117,19 @@ class GestureControllerTest {
         assertTrue(sink.brightnessDeltas.isEmpty())
         assertTrue(sink.seekDeltas.isEmpty())
     }
+
+    @Test
+    fun `onScale clamps emitted zoom factor to supported bounds`() {
+        val sink = RecordingGestureSink()
+        val controller = GestureSessionController(sink = sink)
+
+        controller.onTouchDown(startX = 600f, startY = 400f, widthPx = 1200)
+        assertTrue(controller.onScaleBegin())
+        assertTrue(controller.onScale(4f))
+        assertTrue(controller.onScale(0.2f))
+
+        assertEquals(listOf(3f, 1f), sink.zoomFactors)
+    }
 }
 
 private class RecordingGestureSink : GestureCallbackSink {

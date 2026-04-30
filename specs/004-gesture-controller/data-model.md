@@ -2,7 +2,7 @@
 
 ## Overview
 
-Feature này không thêm persistence. Mô hình dữ liệu tập trung vào runtime gesture state để `GestureController` phân loại chính xác thao tác trên `PlayerView` và phát đúng callback theo spec.
+Feature này không thêm persistence. Mô hình dữ liệu tập trung vào runtime gesture state và threshold profile để `GestureController` phân loại chính xác thao tác trên `PlayerView` và phát đúng callback theo mapping định lượng của spec.
 
 ## Entities
 
@@ -31,7 +31,9 @@ Feature này không thêm persistence. Mô hình dữ liệu tập trung vào ru
 |-------|------|----------|-------------|
 | `directionLockDistancePx` | Float | Yes | Ngưỡng tối thiểu để khóa hướng vuốt |
 | `volumeStepDistancePx` | Float | Yes | Khoảng cách pixel tương ứng một bước âm lượng |
+| `volumeStepAmount` | Float | Yes | Giá trị delta volume phát ra cho mỗi bước |
 | `brightnessStepDistancePx` | Float | Yes | Khoảng cách pixel tương ứng một bước độ sáng |
+| `brightnessStepAmount` | Float | Yes | Giá trị delta brightness phát ra cho mỗi bước |
 | `seekMsPerPixel` | Long | Yes | Tỷ lệ chuyển đổi giữa vuốt ngang và delta seek |
 | `doubleTapSeekMs` | Long | Yes | Giá trị tua cố định cho double tap vùng trái/phải |
 | `fastForwardSpeed` | Float | Yes | Tốc độ tua nhanh tạm thời khi long press |
@@ -42,7 +44,22 @@ Feature này không thêm persistence. Mô hình dữ liệu tập trung vào ru
 
 - Tất cả giá trị khoảng cách và thời gian phải dương.
 - `minZoom` phải nhỏ hơn hoặc bằng `maxZoom`.
-- `doubleTapSeekMs` và `fastForwardSpeed` phải khớp với hành vi người dùng nhìn thấy trong spec hiện hành.
+- `volumeStepAmount` phải bằng `1.0` và `brightnessStepAmount` phải bằng `0.05` cho feature hiện tại.
+- `doubleTapSeekMs` phải bằng `10000`, `fastForwardSpeed` phải bằng `2.0`, `minZoom` phải bằng `1.0`, và `maxZoom` phải bằng `3.0` cho contract hiện hành.
+
+**Default contract values for this feature**
+
+| Property | Value | Source |
+|----------|-------|--------|
+| `volumeStepDistancePx` | `150` | FR-002 |
+| `volumeStepAmount` | `1.0` | FR-002 |
+| `brightnessStepDistancePx` | `150` | FR-003 |
+| `brightnessStepAmount` | `0.05` | FR-003 |
+| `seekMsPerPixel` | `100` | FR-004 |
+| `doubleTapSeekMs` | `10000` | FR-006 |
+| `fastForwardSpeed` | `2.0` | FR-007 |
+| `minZoom` | `1.0` | FR-008 |
+| `maxZoom` | `3.0` | FR-008 |
 
 ### GestureZone
 
@@ -74,7 +91,7 @@ Feature này không thêm persistence. Mô hình dữ liệu tập trung vào ru
 
 **Validation rules**
 
-- `VolumeDelta`, `BrightnessDelta` và `SeekDelta` phải giữ đúng dấu theo hướng thao tác.
+- `VolumeDelta`, `BrightnessDelta` và `SeekDelta` phải giữ đúng dấu theo hướng thao tác; với contract hiện tại, vuốt lên là delta dương cho volume/brightness và vuốt sang phải là delta dương cho seek.
 - `FastForwardEnd` chỉ hợp lệ sau khi đã có `FastForwardStart` trong cùng session.
 - `Ignored` được dùng cho thao tác không đủ ngưỡng hoặc bị hủy, không được phát kèm outcome khác.
 

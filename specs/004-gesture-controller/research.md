@@ -16,7 +16,15 @@
   - Tính zone theo vị trí hiện tại của ngón tay ở mọi frame: dễ gây đổi âm lượng sang độ sáng hoặc ngược lại giữa chừng.
   - Chốt axis ngay từ những pixel đầu tiên: làm tăng nguy cơ nhận nhầm giữa seek ngang và vuốt dọc ở thao tác chưa ổn định.
 
-## Decision 3: Ưu tiên pinch và bảo đảm một gesture session chỉ phát ra một loại outcome đang hoạt động
+## Decision 3: Chuẩn hóa `GestureThresholdProfile` theo đúng các giá trị mapping đã chốt trong spec
+
+- **Decision**: Dùng một profile hằng số chung cho toàn bộ feature với các giá trị hợp đồng sau: `volumeStepDistancePx = 150f`, `volumeStepAmount = 1f`, `brightnessStepDistancePx = 150f`, `brightnessStepAmount = 0.05f`, `seekMsPerPixel = 100L`, `doubleTapSeekMs = 10000L`, `fastForwardSpeed = 2f`, `minZoom = 1f`, `maxZoom = 3f`.
+- **Rationale**: Phase 2.2 đã chốt rõ mapping định lượng, nên planning cần đẩy chúng thành một profile nhất quán để unit test, contract và quickstart cùng nói một ngôn ngữ. Cách này giảm rủi ro để logic parsing, callback wiring và verification mỗi nơi dùng một công thức khác nhau.
+- **Alternatives considered**:
+  - Giữ các giá trị rải rác trong nhiều nhánh `when`/`if`: dễ drift giữa implementation và test.
+  - Chỉ giữ tỷ lệ ở mức mô tả trong spec mà không đóng thành profile kỹ thuật: khó kiểm tra đầy đủ các giá trị trong unit test và contract.
+
+## Decision 4: Ưu tiên pinch và bảo đảm một gesture session chỉ phát ra một loại outcome đang hoạt động
 
 - **Decision**: Khi `ScaleGestureDetector` nhận đủ tín hiệu pinch, session chuyển sang chế độ zoom và chặn diễn giải vuốt một ngón từ cùng chuỗi chạm; long press được xem là trạng thái tạm thời có cặp callback bắt đầu/kết thúc riêng.
 - **Rationale**: Android guidance cho touch listener trên surface media/camera khuyến nghị đưa `ScaleGestureDetector` vào trước và chỉ giao tiếp cho detector còn lại khi pinch không còn in progress. Điều này khớp với requirement FR-009 và FR-011 về tránh outcome mâu thuẫn trong cùng một chuỗi chạm.
@@ -24,7 +32,7 @@
   - Cho pinch và swipe cùng xử lý song song: tăng nguy cơ vừa zoom vừa seek/brightness trong cùng một tương tác.
   - Tự viết state machine multi-touch hoàn toàn thủ công: linh hoạt hơn nhưng phức tạp quá mức so với API detector Android đã có.
 
-## Decision 4: Giữ side effect hệ thống ở `PlayerActivity`, `GestureController` chỉ phát ý định điều khiển
+## Decision 5: Giữ side effect hệ thống ở `PlayerActivity`, `GestureController` chỉ phát ý định điều khiển
 
 - **Decision**: `GestureController` không trực tiếp thay đổi âm lượng, độ sáng hay player state; mọi side effect vẫn đi qua callback để `PlayerActivity` hoặc lớp tích hợp hiện có áp dụng bằng `CxPlayerManager`, `AudioManager` và `Window` brightness.
 - **Rationale**: Constructor spec đã định nghĩa callback boundary rõ ràng. Giữ controller ở mức phát ý định giúp test được logic gesture mà không cần dựng toàn bộ Android service, đồng thời không buộc lớp này phụ thuộc vào playback manager hoặc window APIs.
@@ -32,9 +40,9 @@
   - Để `GestureController` tự gọi thẳng `AudioManager` và chỉnh `LayoutParams.screenBrightness`: thuận tiện ngắn hạn nhưng tăng coupling với Activity context và khó mock/test.
   - Chuyển logic volume/brightness sang `CxPlayerManager`: không phù hợp vì đây là side effect UI/device-level chứ không phải media engine core.
 
-## Decision 5: Validation dùng kết hợp unit test cho threshold math và instrumentation cho surface integration
+## Decision 6: Validation dùng kết hợp unit test cho threshold math và instrumentation cho surface integration
 
-- **Decision**: Tách phần tính zone/axis/threshold đủ độc lập để có thể unit test ở `src/test`, đồng thời mở rộng `PlayerActivityPlaybackTest` hoặc thêm instrumentation test để xác nhận `PlayerView` nhận touch listener, callback wiring hoạt động, và các gesture không phá playback session hiện có.
+- **Decision**: Tách phần tính zone/axis/threshold đủ độc lập để có thể unit test ở `src/test`, đồng thời mở rộng `PlayerActivityPlaybackTest` hoặc thêm instrumentation test để xác nhận `PlayerView` nhận touch listener, callback wiring hoạt động, và các gesture không phá playback session hiện có. Trên môi trường không có thiết bị sẵn sàng, dùng `compileDebugAndroidTestKotlin` như bước sanity-check trước khi chạy instrumentation thật.
 - **Rationale**: Feature này vừa có phần tính toán thuần, vừa có phần phụ thuộc thực vào Android touch dispatch. Chỉ dùng instrumentation sẽ chậm và khó pinpoint lỗi phân loại; chỉ dùng unit test sẽ bỏ sót rủi ro tích hợp với `PlayerView` và lifecycle của activity.
 - **Alternatives considered**:
   - Chỉ manual QA: không đủ để khóa regression cho các task 2.2-2.7 nối tiếp.

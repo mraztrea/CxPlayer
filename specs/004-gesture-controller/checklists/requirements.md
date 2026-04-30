@@ -33,3 +33,4 @@
 
 - Validation completed in one iteration on 2026-04-30.
 - Scope is limited to the centralized gesture coordination behavior for the playback surface; overlay UI and separate Phase 2 features remain out of scope.
+- Revalidated on 2026-04-30 after expanding the spec with the quantitative mapping values from task 2.2 of `_docs/plans/phase-2-gesture-controls.md`.

@@ -3,7 +3,7 @@
 **Input**: Design documents from `/specs/004-gesture-controller/`  
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/gesture-controller-contract.md, quickstart.md
 
-**Tests**: Bao gồm task test vì `plan.md`, `research.md`, và `quickstart.md` đã chốt unit test cho gesture math/callback sequencing và instrumentation test cho `PlayerView` touch integration.
+**Tests**: Bao gồm task test vì `plan.md`, `research.md`, và `quickstart.md` đã chốt unit test cho gesture math, quantified threshold mapping, callback sequencing, và instrumentation test cho `PlayerView` touch integration.
 
 **Organization**: Tasks được nhóm theo user story để mỗi story có thể triển khai và kiểm thử độc lập.
 
@@ -18,7 +18,7 @@
 **Purpose**: Chuẩn bị entry point và test harness cho gesture feature trước khi thêm logic nhận diện thật
 
 - [X] T001 Create `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt` as the dedicated touch coordination entry point for player gestures
-- [X] T002 [P] Create `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt` for host-side gesture math and callback sequencing coverage
+- [X] T002 [P] Create `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt` for host-side gesture math, threshold profile, and callback sequencing coverage
 - [X] T003 [P] Prepare gesture dispatch scaffolding around `playerView` in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ---
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: Không bắt đầu user story nào trước khi phase này xong
 
-- [X] T004 Implement shared gesture session state, zone resolution helpers, and threshold constants in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
-- [X] T005 [P] Add temporary playback speed control APIs needed for long-press fast forward in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T004 Implement shared gesture session state, zone resolution helpers, and quantified threshold profile (`150px`, `1f`, `0.05f`, `100ms`, `10000ms`, `2f`, `1f..3f`) in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
+- [X] T005 [P] Add temporary playback speed control APIs needed for long-press `2x` fast forward in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
 - [X] T006 Implement `GestureController` ownership, `AudioManager`/brightness dependencies, and callback plumbing in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [X] T007 [P] Add reusable touch dispatch and gesture assertion helpers in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T007 [P] Add reusable touch dispatch and gesture assertion helpers for quantified gesture mapping in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 **Checkpoint**: `GestureController`, `PlayerActivity`, và `CxPlayerManager` đã có boundary ổn định để story work chỉ cần lấp từng nhánh gesture
 
@@ -42,19 +42,19 @@
 
 **Goal**: Người dùng vuốt trực tiếp trên vùng phát để điều chỉnh âm lượng, độ sáng và seek mà không cần mở control phụ
 
-**Independent Test**: Mở một video đang phát, vuốt dọc nửa phải/nửa trái và vuốt ngang trên `playerView`, rồi xác nhận mỗi thao tác chỉ tạo đúng loại effect mong đợi
+**Independent Test**: Mở một video đang phát, vuốt dọc nửa phải/nửa trái và vuốt ngang trên `playerView`, rồi xác nhận mapping `1 bước / 150px`, `0,05 / 150px`, và `distance * 100ms` được áp đúng mà không phát sai loại effect
 
 ### Tests for User Story 1
 
-- [X] T008 [P] [US1] Add zone-lock, axis-lock, and swipe-delta unit coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
-- [X] T009 [P] [US1] Add instrumentation swipe assertions for seek changes and no-crash brightness/volume handling in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T008 [P] [US1] Add zone-lock, axis-lock, and quantified swipe-delta unit coverage for `150px`, `0.05`, and `100ms` mapping in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
+- [X] T009 [P] [US1] Add instrumentation swipe assertions for quantified seek, brightness, and volume handling in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 1
 
-- [X] T010 [US1] Implement right-half volume, left-half brightness, and horizontal seek gesture parsing in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
-- [X] T011 [US1] Wire volume, brightness, and seek-delta callbacks to device/player side effects in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T010 [US1] Implement right-half volume, left-half brightness, and horizontal seek gesture parsing with `1 bước / 150px`, `0.05 / 150px`, and `distance * 100ms` rules in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
+- [X] T011 [US1] Wire quantified volume, brightness, and seek-delta callbacks to device/player side effects in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
-**Checkpoint**: User Story 1 hoàn chỉnh khi vuốt dọc/ngang trên `playerView` điều khiển đúng hành vi mà không làm rơi playback session
+**Checkpoint**: User Story 1 hoàn chỉnh khi vuốt dọc/ngang trên `playerView` điều khiển đúng hành vi định lượng mà không làm rơi playback session
 
 ---
 
@@ -62,18 +62,18 @@
 
 **Goal**: Người dùng double tap hoặc long press trên vùng phát để play/pause, seek ±10 giây và kích hoạt tua nhanh tạm thời 2x
 
-**Independent Test**: Phát một video, double tap ở vùng trái/giữa/phải và nhấn giữ trên `playerView`, rồi xác nhận play/pause, seek cố định và trạng thái fast-forward xuất hiện đúng một lần cho mỗi thao tác
+**Independent Test**: Phát một video, double tap ở vùng trái/giữa/phải và nhấn giữ trên `playerView`, rồi xác nhận seek cố định `±10000ms`, toggle play/pause đúng một lần và long-press lifecycle `2x` xuất hiện đúng cặp start/end
 
 ### Tests for User Story 2
 
-- [X] T012 [P] [US2] Add double-tap zone routing and long-press lifecycle unit coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
-- [X] T013 [P] [US2] Add instrumentation coverage for center/side double tap and temporary fast-forward behavior in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T012 [P] [US2] Add double-tap zone routing and long-press lifecycle unit coverage for `±10000ms` seek and `2f` fast-forward in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
+- [X] T013 [P] [US2] Add instrumentation coverage for center/side double tap and temporary `2x` fast-forward behavior in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 2
 
-- [X] T014 [US2] Implement center/side double tap detection and long-press start/end callbacks in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
-- [X] T015 [US2] Add temporary playback speed start/reset helpers in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
-- [X] T016 [US2] Wire play/pause toggle, fixed seek ±10s, and long-press 2x lifecycle in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T014 [US2] Implement center/side double tap detection and long-press start/end callbacks with fixed `±10000ms` seek mapping in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
+- [X] T015 [US2] Add temporary playback speed start/reset helpers for `2f` long-press fast forward in `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
+- [X] T016 [US2] Wire play/pause toggle, fixed seek `±10000ms`, and long-press `2x` lifecycle in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 2 hoàn chỉnh khi gesture chạm nhanh và nhấn giữ tạo đúng playback action mà không cần chạm transport buttons
 
@@ -83,17 +83,17 @@
 
 **Goal**: Pinch và các chuỗi touch phức tạp được phân giải nhất quán, không tạo outcome mâu thuẫn khi người dùng đổi kiểu thao tác giữa chừng
 
-**Independent Test**: Dùng pinch, multi-touch transition và thao tác mơ hồ trên `playerView`, rồi xác nhận chỉ một outcome hợp lệ được phát ra cho mỗi gesture session
+**Independent Test**: Dùng pinch, multi-touch transition và thao tác mơ hồ trên `playerView`, rồi xác nhận zoom bị chặn trong dải `1,0x -> 3,0x` và chỉ một outcome hợp lệ được phát ra cho mỗi gesture session
 
 ### Tests for User Story 3
 
-- [X] T017 [P] [US3] Add pinch-priority, ambiguous-gesture cancellation, and single-outcome-session unit coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
-- [X] T018 [P] [US3] Add instrumentation coverage for pinch zoom and multi-touch conflict handling on `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T017 [P] [US3] Add pinch-priority, ambiguous-gesture cancellation, and `1f..3f` zoom-bound unit coverage in `CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt`
+- [X] T018 [P] [US3] Add instrumentation coverage for bounded pinch zoom and multi-touch conflict handling on `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 3
 
-- [X] T019 [US3] Implement pinch detection, ambiguous-session cancellation, and mixed-touch conflict guards in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
-- [X] T020 [US3] Apply zoom callback behavior and lifecycle-safe gesture cleanup in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T019 [US3] Implement pinch detection, ambiguous-session cancellation, mixed-touch conflict guards, and zoom clamping to `1f..3f` in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`
+- [X] T020 [US3] Apply bounded zoom callback behavior and lifecycle-safe gesture cleanup in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 3 hoàn chỉnh khi pinch hoạt động và không có chuỗi chạm nào phát đồng thời các outcome mâu thuẫn
 
@@ -105,7 +105,7 @@
 
 - [X] T021 Clean up duplicated gesture constants and unused plumbing in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/GestureController.kt`, `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`, and `CxPlayer/app/src/main/java/com/cxplayer/player/CxPlayerManager.kt`
 - [X] T022 Run host-side quickstart validation with `CxPlayer/gradlew.bat testDebugUnitTest --tests com.cxplayer.ui.player.GestureControllerTest`
-- [ ] T023 Run instrumentation and manual gesture verification from `specs/004-gesture-controller/quickstart.md` with `CxPlayer/gradlew.bat connectedDebugAndroidTest`
+- [ ] T023 Run androidTest compile, instrumentation, and manual gesture verification from `specs/004-gesture-controller/quickstart.md` with `CxPlayer/gradlew.bat compileDebugAndroidTestKotlin` and `CxPlayer/gradlew.bat connectedDebugAndroidTest`
 
 ---
 
@@ -146,22 +146,22 @@
 ## Parallel Example: User Story 1
 
 ```text
-T008 [US1] Add zone-lock, axis-lock, and swipe-delta unit coverage in CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt
-T009 [US1] Add instrumentation swipe assertions for seek changes and no-crash brightness/volume handling in CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
+T008 [US1] Add zone-lock, axis-lock, and quantified swipe-delta unit coverage in CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt
+T009 [US1] Add instrumentation swipe assertions for quantified seek, brightness, and volume handling in CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
 ```
 
 ## Parallel Example: User Story 2
 
 ```text
 T012 [US2] Add double-tap zone routing and long-press lifecycle unit coverage in CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt
-T013 [US2] Add instrumentation coverage for center/side double tap and temporary fast-forward behavior in CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
+T013 [US2] Add instrumentation coverage for center/side double tap and temporary 2x fast-forward behavior in CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
 ```
 
 ## Parallel Example: User Story 3
 
 ```text
-T017 [US3] Add pinch-priority, ambiguous-gesture cancellation, and single-outcome-session unit coverage in CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt
-T018 [US3] Add instrumentation coverage for pinch zoom and multi-touch conflict handling on CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
+T017 [US3] Add pinch-priority, ambiguous-gesture cancellation, and zoom-bound unit coverage in CxPlayer/app/src/test/java/com/cxplayer/ui/player/GestureControllerTest.kt
+T018 [US3] Add instrumentation coverage for bounded pinch zoom and multi-touch conflict handling on CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt
 ```
 
 ---
@@ -173,12 +173,12 @@ T018 [US3] Add instrumentation coverage for pinch zoom and multi-touch conflict 
 1. Hoàn thành Phase 1 và Phase 2
 2. Hoàn thành US1 (T008-T011)
 3. Chạy T022 cho host-side gesture regression
-4. Demo swipe volume/brightness/seek trên `playerView` trước khi mở rộng sang double tap, long press và pinch
+4. Demo swipe volume/brightness/seek với mapping định lượng trên `playerView` trước khi mở rộng sang double tap, long press và pinch
 
 ### Incremental Delivery
 
 1. Setup + Foundational → gesture boundary và player integration hooks sẵn sàng
-2. US1 → swipe mapping ổn định
+2. US1 → quantified swipe mapping ổn định
 3. US2 → double tap và long press playback actions ổn định
 4. US3 → pinch và conflict handling được khóa
 5. Polish → regression + manual verification hoàn tất
@@ -203,4 +203,4 @@ T018 [US3] Add instrumentation coverage for pinch zoom and multi-touch conflict 
 - Task theo user story: US1 = 4, US2 = 5, US3 = 4
 - Setup/Foundation/Polish: 10 task
 - Parallel opportunities đã đánh dấu: 10 task
-- Tất cả task đều dùng checklist format `- [ ] Txxx ...` với checkbox, Task ID tuần tự, marker `[P]` khi phù hợp, story label cho phase story, và file path rõ ràng
+- T023 vẫn mở vì `connectedDebugAndroidTest` hiện bị chặn bởi `INSTALL_FAILED_ABORTED: User rejected permissions` trên thiết bị, và full class instrumentation còn crash ở `recreateAndOrientationChangeKeepPlayerChromeVisible` ngoài slice gesture vừa cập nhật.
