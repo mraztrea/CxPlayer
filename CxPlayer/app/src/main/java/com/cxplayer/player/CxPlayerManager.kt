@@ -14,6 +14,20 @@ private const val DEFAULT_PLAYBACK_SPEED = 1f
 private const val MIN_PLAYBACK_SPEED = 0.25f
 private const val MAX_PLAYBACK_SPEED = 2f
 
+internal data class PlayerSessionConfigurationSnapshot(
+    val seekBackIncrementMs: Long,
+    val seekForwardIncrementMs: Long,
+    val renderersFactoryClassName: String
+)
+
+internal fun playerSessionConfigurationSnapshot(): PlayerSessionConfigurationSnapshot {
+    return PlayerSessionConfigurationSnapshot(
+        seekBackIncrementMs = TRANSPORT_SEEK_INCREMENT_MS,
+        seekForwardIncrementMs = TRANSPORT_SEEK_INCREMENT_MS,
+        renderersFactoryClassName = CxRenderersFactory::class.java.name
+    )
+}
+
 class CxPlayerManager internal constructor(
     private val sessionFactory: PlayerSessionFactory
 ) {
@@ -250,9 +264,11 @@ private class ExoPlayerSessionFactory(
     private val context: Context
 ) : PlayerSessionFactory {
     override fun create(): PlayerSession {
+        val configuration = playerSessionConfigurationSnapshot()
         val exoPlayer = ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(TRANSPORT_SEEK_INCREMENT_MS)
-            .setSeekForwardIncrementMs(TRANSPORT_SEEK_INCREMENT_MS)
+            .setRenderersFactory(CxRenderersFactory(context))
+            .setSeekBackIncrementMs(configuration.seekBackIncrementMs)
+            .setSeekForwardIncrementMs(configuration.seekForwardIncrementMs)
             .build()
         return ExoPlayerSession(exoPlayer)
     }

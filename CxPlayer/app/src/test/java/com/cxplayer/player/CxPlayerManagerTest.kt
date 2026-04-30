@@ -1,5 +1,6 @@
 package com.cxplayer.player
 
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.common.Player
 import com.cxplayer.ui.player.LaunchOrigin
 import com.cxplayer.ui.player.MediaScheme
@@ -12,6 +13,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CxPlayerManagerTest {
+    @Test
+    fun `renderer policy prefers extensions and enables decoder fallback`() {
+        val policy = cxRendererPolicySnapshot()
+
+        assertEquals(
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER,
+            policy.extensionRendererMode
+        )
+        assertTrue(policy.decoderFallbackEnabled)
+    }
+
+    @Test
+    fun `player session configuration keeps transport increments and custom renderer factory`() {
+        val configuration = playerSessionConfigurationSnapshot()
+
+        assertEquals(10_000L, configuration.seekBackIncrementMs)
+        assertEquals(10_000L, configuration.seekForwardIncrementMs)
+        assertEquals(CxRenderersFactory::class.java.name, configuration.renderersFactoryClassName)
+    }
+
     @Test
     fun `load creates a single session until release`() {
         val factory = FakePlayerSessionFactory()
@@ -129,6 +150,27 @@ class CxPlayerManagerTest {
         manager.resetPlaybackSpeed()
         assertEquals(1f, session.playbackSpeed, 0f)
         assertEquals(1f, manager.currentState().playbackSpeed, 0f)
+    }
+
+    @Test
+    fun `error state is surfaced and next load can reuse the same session`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L))
+        val session = factory.lastSession()
+        session.hasError = true
+
+        val failedState = manager.currentState()
+        assertEquals(PlaybackSessionState.Error, failedState.sessionState)
+
+        session.hasError = false
+        val recoveredState = manager.load(buildRequest(startIndex = 1, startPositionMs = 3_000L))
+
+        assertEquals(1, factory.createdSessions.size)
+        assertEquals(PlaybackSessionState.Playing, recoveredState.sessionState)
+        assertEquals(1, recoveredState.currentIndex)
+        assertEquals(3_000L, session.lastStartPositionMs)
     }
 
     private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {

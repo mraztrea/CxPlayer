@@ -83,6 +83,23 @@ class PlayerActivityPlaybackTest {
     }
 
     @Test
+    fun unsupportedLaunchFinishesCleanlyAndNextSupportedLaunchStillWorks() {
+        ActivityScenario.launch<PlayerActivity>(buildUnsupportedLaunchIntent()).use { rejectedScenario ->
+            rejectedScenario.onActivity { activity ->
+                assertTrue(activity.isFinishing || activity.isDestroyed)
+            }
+        }
+
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { recoveryScenario ->
+            recoveryScenario.onActivity { activity ->
+                assertNotNull(activity.currentPlaybackSnapshot())
+                assertVisible(activity, R.id.playerView)
+                assertVisible(activity, R.id.playerTransportRow)
+            }
+        }
+    }
+
+    @Test
     fun transportButtonsControlPlaybackSession() {
         ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
             scenario.onActivity { activity ->
@@ -342,6 +359,19 @@ class PlayerActivityPlaybackTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return Intent(context, PlayerActivity::class.java).apply {
             data = Uri.parse("http://example.com/demo.mp4")
+        }
+    }
+
+    private fun buildUnsupportedLaunchIntent(): Intent {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val tempFile = File.createTempFile("player-activity-unsupported", ".txt", context.cacheDir)
+        if (!tempFile.exists()) {
+            tempFile.writeBytes("unsupported".toByteArray())
+        }
+
+        return Intent(context, PlayerActivity::class.java).apply {
+            data = Uri.fromFile(tempFile)
+            type = "text/plain"
         }
     }
 
