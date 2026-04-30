@@ -17,8 +17,8 @@
 
 **Purpose**: Chuẩn bị resource dùng chung cho toàn bộ player chrome trước khi thay bố cục và wiring activity
 
-- [ ] T001 [P] Add shared player chrome scrim resources in `CxPlayer/app/src/main/res/values/colors.xml` and `CxPlayer/app/src/main/res/drawable/bg_player_chrome_scrim.xml`
-- [ ] T002 [P] Add fallback text and accessibility strings for player chrome in `CxPlayer/app/src/main/res/values/strings.xml`
+- [X] T001 [P] Add shared player chrome scrim resources in `CxPlayer/app/src/main/res/values/colors.xml` and `CxPlayer/app/src/main/res/drawable/bg_player_chrome_scrim.xml`
+- [X] T002 [P] Add fallback text and accessibility strings for player chrome in `CxPlayer/app/src/main/res/values/strings.xml`
 
 ---
 
@@ -28,9 +28,9 @@
 
 **⚠️ CRITICAL**: Không bắt đầu user story nào trước khi phase này xong
 
-- [ ] T003 Replace the single-surface root with overlay-ready chrome containers and stable region IDs in `CxPlayer/app/src/main/res/layout/activity_player.xml`
-- [ ] T004 Add player chrome view references and initialization entry points in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T005 [P] Add reusable player chrome lookup and assertion helpers in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T003 Replace the single-surface root with overlay-ready chrome containers and stable region IDs in `CxPlayer/app/src/main/res/layout/activity_player.xml`
+- [X] T004 Add player chrome view references and initialization entry points in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T005 [P] Add reusable player chrome lookup and assertion helpers in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 **Checkpoint**: `PlayerActivity` và `activity_player.xml` đã có skeleton ổn định để US1-US3 chỉ cần lấp từng region theo story
 
@@ -44,13 +44,13 @@
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [US1] Add first-render assertions for video, timeline, and transport regions in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T006 [P] [US1] Add first-render assertions for video, timeline, and transport regions in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Add `playerCurrentTimeView`, `playerSeekBar`, `playerDurationView`, `playerSeekBackButton`, `playerPlayPauseButton`, `playerSeekForwardButton`, `playerVolumeButton`, and `playerSettingsButton` to `CxPlayer/app/src/main/res/layout/activity_player.xml`
-- [ ] T008 [P] [US1] Add transport vector assets in `CxPlayer/app/src/main/res/drawable/ic_player_seek_back.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_play.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_pause.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_seek_forward.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_volume.xml`, and `CxPlayer/app/src/main/res/drawable/ic_player_settings.xml`
-- [ ] T009 [US1] Bind bottom chrome placeholder values, icon state, and safe no-op click handlers in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T007 [US1] Add `playerCurrentTimeView`, `playerSeekBar`, `playerDurationView`, `playerSeekBackButton`, `playerPlayPauseButton`, `playerSeekForwardButton`, `playerVolumeButton`, and `playerSettingsButton` to `CxPlayer/app/src/main/res/layout/activity_player.xml`
+- [X] T008 [P] [US1] Add transport vector assets in `CxPlayer/app/src/main/res/drawable/ic_player_seek_back.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_play.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_pause.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_seek_forward.xml`, `CxPlayer/app/src/main/res/drawable/ic_player_volume.xml`, and `CxPlayer/app/src/main/res/drawable/ic_player_settings.xml`
+- [X] T009 [US1] Bind bottom chrome placeholder values, icon state, and safe no-op click handlers in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 1 hoàn chỉnh khi màn hình player có video + bottom chrome đầy đủ và mở lên ổn định trên local/HTTP launch
 
@@ -64,13 +64,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T010 [P] [US2] Add assertions for top bar visibility, fallback title, and overflow availability in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T010 [P] [US2] Add assertions for top bar visibility, fallback title, and overflow availability in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Add `playerBackButton`, `playerTitleView`, and `playerOverflowButton` to the top chrome region in `CxPlayer/app/src/main/res/layout/activity_player.xml`
-- [ ] T012 [P] [US2] Add top-bar vector assets in `CxPlayer/app/src/main/res/drawable/ic_player_back.xml` and `CxPlayer/app/src/main/res/drawable/ic_player_overflow.xml`
-- [ ] T013 [US2] Wire back navigation, fallback title text, metadata title updates, and overflow placeholder behavior in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T011 [US2] Add `playerBackButton`, `playerTitleView`, and `playerOverflowButton` to the top chrome region in `CxPlayer/app/src/main/res/layout/activity_player.xml`
+- [X] T012 [P] [US2] Add top-bar vector assets in `CxPlayer/app/src/main/res/drawable/ic_player_back.xml` and `CxPlayer/app/src/main/res/drawable/ic_player_overflow.xml`
+- [X] T013 [US2] Wire back navigation, fallback title text, metadata title updates, and overflow placeholder behavior in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 2 hoàn chỉnh khi top bar luôn giữ được điều hướng và ngữ cảnh dù title đầy đủ, dài, hay thiếu hoàn toàn
 
@@ -84,13 +84,13 @@
 
 ### Tests for User Story 3
 
-- [ ] T014 [P] [US3] Add recreate and orientation assertions for full player chrome visibility in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
+- [X] T014 [P] [US3] Add recreate and orientation assertions for full player chrome visibility in `CxPlayer/app/src/androidTest/java/com/cxplayer/ui/player/PlayerActivityPlaybackTest.kt`
 
 ### Implementation for User Story 3
 
-- [ ] T015 [P] [US3] Add chrome spacing and compact-height dimensions in `CxPlayer/app/src/main/res/values/dimens.xml`
-- [ ] T016 [US3] Apply portrait/landscape spacing, compact-height layout rules, and stable timeline sizing in `CxPlayer/app/src/main/res/layout/activity_player.xml`
-- [ ] T017 [US3] Apply `WindowInsets` handling and compact-mode updates for top and bottom chrome in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T015 [P] [US3] Add chrome spacing and compact-height dimensions in `CxPlayer/app/src/main/res/values/dimens.xml`
+- [X] T016 [US3] Apply portrait/landscape spacing, compact-height layout rules, and stable timeline sizing in `CxPlayer/app/src/main/res/layout/activity_player.xml`
+- [X] T017 [US3] Apply `WindowInsets` handling and compact-mode updates for top and bottom chrome in `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
 
 **Checkpoint**: User Story 3 hoàn chỉnh khi cùng một chrome contract vẫn usable sau orientation/recreate mà không cần tạo layout riêng ngoài phạm vi Phase 1
 
@@ -100,8 +100,8 @@
 
 **Purpose**: Khóa regression, dọn wiring chéo, và xác nhận quickstart trước khi chuyển sang feature kế tiếp
 
-- [ ] T018 Clean up duplicate chrome wiring and unused placeholders in `CxPlayer/app/src/main/res/layout/activity_player.xml` and `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
-- [ ] T019 Run host-side validation command from `specs/003-player-layout/quickstart.md` using `CxPlayer/gradlew.bat testDebugUnitTest`
+- [X] T018 Clean up duplicate chrome wiring and unused placeholders in `CxPlayer/app/src/main/res/layout/activity_player.xml` and `CxPlayer/app/src/main/java/com/cxplayer/ui/player/PlayerActivity.kt`
+- [X] T019 Run host-side validation command from `specs/003-player-layout/quickstart.md` using `CxPlayer/gradlew.bat testDebugUnitTest`
 - [ ] T020 Run instrumentation and manual verification scenarios from `specs/003-player-layout/quickstart.md` using `CxPlayer/gradlew.bat connectedDebugAndroidTest`
 
 ---

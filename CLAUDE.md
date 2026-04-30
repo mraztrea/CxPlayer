@@ -122,7 +122,7 @@ Khi hoàn thành task phức tạp hoặc phát hiện pattern/convention quan t
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **recland-v4** (15910 symbols, 27827 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **CxPlayer** (1888 symbols, 4907 relationships, 154 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -145,10 +145,10 @@ This project is indexed by GitNexus as **recland-v4** (15910 symbols, 27827 rela
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/recland-v4/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/recland-v4/clusters` | All functional areas |
-| `gitnexus://repo/recland-v4/processes` | All execution flows |
-| `gitnexus://repo/recland-v4/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/CxPlayer/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/CxPlayer/clusters` | All functional areas |
+| `gitnexus://repo/CxPlayer/processes` | All execution flows |
+| `gitnexus://repo/CxPlayer/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 
@@ -162,4 +162,3 @@ This project is indexed by GitNexus as **recland-v4** (15910 symbols, 27827 rela
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
-

@@ -5,35 +5,71 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
+import androidx.core.view.updatePadding
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
+import com.cxplayer.databinding.ActivityPlayerBinding
 import com.cxplayer.player.CxPlayerManager
 import com.cxplayer.player.PlaybackSnapshot
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Locale
+import kotlin.math.min
 
 private const val STATE_PLAYBACK_INDEX = "state_playback_index"
 private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
 private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
 
 class PlayerActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityPlayerBinding
     private lateinit var playerView: PlayerView
+    private lateinit var topChrome: ViewGroup
+    private lateinit var bottomChrome: ViewGroup
+    private lateinit var topRegion: ViewGroup
+    private lateinit var timelineRow: ViewGroup
+    private lateinit var transportRow: ViewGroup
+    private lateinit var backButton: ImageButton
+    private lateinit var titleView: TextView
+    private lateinit var overflowButton: ImageButton
+    private lateinit var currentTimeView: TextView
+    private lateinit var durationView: TextView
+    private lateinit var seekBar: SeekBar
+    private lateinit var seekBackButton: ImageButton
+    private lateinit var playPauseButton: ImageButton
+    private lateinit var seekForwardButton: ImageButton
+    private lateinit var volumeButton: ImageButton
+    private lateinit var settingsButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
     private var pendingLaunch: PendingLaunch? = null
     private var pendingSnapshot: PlaybackSnapshot? = null
+    private var activeRequest: PlaybackRequest? = null
+    private var topSystemInsetPx: Int = 0
+    private var bottomSystemInsetPx: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_player)
+        binding = ActivityPlayerBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        playerView = findViewById(R.id.playerView)
+        playerView = binding.playerView
+        bindChromeViews()
+        initializeTopChrome()
+        initializeBottomChrome()
+        initializeChromeLayoutBehavior()
         pendingSnapshot = restoreSnapshot(savedInstanceState)
         updatePendingLaunch(intent)
+        updateTopChrome()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -41,6 +77,7 @@ class PlayerActivity : AppCompatActivity() {
         setIntent(intent)
         pendingSnapshot = null
         updatePendingLaunch(intent)
+        updateTopChrome()
         if (!isFinishing) {
             beginPlaybackSession()
         }
@@ -100,10 +137,18 @@ class PlayerActivity : AppCompatActivity() {
 
     internal fun currentPlaybackSnapshot(): PlaybackSnapshot? = playerManager.exportSnapshot()
 
+    internal fun hasChromeSkeleton(): Boolean =
+        ::topChrome.isInitialized &&
+            ::bottomChrome.isInitialized &&
+            ::topRegion.isInitialized &&
+            ::timelineRow.isInitialized &&
+            ::transportRow.isInitialized
+
     private fun updatePendingLaunch(intent: Intent?) {
         when (val outcome = PlaybackRequestParser.fromIntent(intent, contentResolver)) {
             is LaunchOutcome.Rejected -> {
                 pendingLaunch = null
+                activeRequest = null
                 showMessage(outcome.messageResId)
                 finish()
             }
@@ -113,6 +158,7 @@ class PlayerActivity : AppCompatActivity() {
                     request = outcome.request,
                     messageResId = null
                 )
+                activeRequest = outcome.request
             }
 
             is LaunchOutcome.FallbackSelected -> {
@@ -120,12 +166,14 @@ class PlayerActivity : AppCompatActivity() {
                     request = outcome.request,
                     messageResId = outcome.messageResId
                 )
+                activeRequest = outcome.request
             }
         }
     }
 
     private fun beginPlaybackSession() {
         val launch = pendingLaunch ?: return
+        activeRequest = launch.request
         playerManager.attach(playerView)
         playerManager.load(
             request = launch.request,
@@ -137,6 +185,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         pendingSnapshot = null
         syncPlayerState()
+        updateTopChrome()
     }
 
     private fun captureSnapshot() {
@@ -157,10 +206,205 @@ class PlayerActivity : AppCompatActivity() {
         )
     }
 
+    private fun bindChromeViews() {
+        topChrome = binding.playerTopChrome
+        bottomChrome = binding.playerBottomChrome
+        topRegion = binding.playerTopRegion
+        timelineRow = binding.playerTimelineRow
+        transportRow = binding.playerTransportRow
+        backButton = binding.playerBackButton
+        titleView = binding.playerTitleView
+        overflowButton = binding.playerOverflowButton
+        currentTimeView = binding.playerCurrentTimeView
+        durationView = binding.playerDurationView
+        seekBar = binding.playerSeekBar
+        seekBackButton = binding.playerSeekBackButton
+        playPauseButton = binding.playerPlayPauseButton
+        seekForwardButton = binding.playerSeekForwardButton
+        volumeButton = binding.playerVolumeButton
+        settingsButton = binding.playerSettingsButton
+    }
+
+    private fun initializeTopChrome() {
+        titleView.text = getString(R.string.player_title_fallback)
+        backButton.setOnClickListener {
+            onBackPressedDispatcher.onBackPressed()
+        }
+        overflowButton.setOnClickListener { }
+    }
+
+    private fun initializeBottomChrome() {
+        currentTimeView.text = getString(R.string.player_time_placeholder)
+        durationView.text = getString(R.string.player_time_placeholder)
+        seekBar.max = 1000
+        seekBar.progress = 0
+        seekBar.isEnabled = false
+        seekBar.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = Unit
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            }
+        )
+        seekBackButton.setOnClickListener { }
+        playPauseButton.setOnClickListener { }
+        seekForwardButton.setOnClickListener { }
+        volumeButton.setOnClickListener { }
+        settingsButton.setOnClickListener { }
+        updateBottomChrome()
+    }
+
+    private fun initializeChromeLayoutBehavior() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.playerRoot) { _, windowInsets ->
+            val systemBarsInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            topSystemInsetPx = systemBarsInsets.top
+            bottomSystemInsetPx = systemBarsInsets.bottom
+            renderChromeLayout(binding.playerRoot.height)
+            windowInsets
+        }
+        binding.playerRoot.doOnLayout { root ->
+            renderChromeLayout(root.height)
+        }
+        ViewCompat.requestApplyInsets(binding.playerRoot)
+    }
+
+    private fun updateBottomChrome() {
+        val state = playerManager.currentState()
+        currentTimeView.text = if (state.hasActiveSession) {
+            formatPlaybackTime(state.currentPositionMs)
+        } else {
+            getString(R.string.player_time_placeholder)
+        }
+        durationView.text = if (state.durationMs > 0L) {
+            formatPlaybackTime(state.durationMs)
+        } else {
+            getString(R.string.player_time_placeholder)
+        }
+        seekBar.isEnabled = state.hasActiveSession && state.durationMs > 0L
+        seekBar.max = if (state.durationMs > 0L) {
+            min(state.durationMs, Int.MAX_VALUE.toLong()).toInt()
+        } else {
+            1000
+        }
+        seekBar.progress = min(state.currentPositionMs, seekBar.max.toLong()).toInt()
+        val iconRes = if (state.hasActiveSession && state.playWhenReady) {
+            R.drawable.ic_player_pause
+        } else {
+            R.drawable.ic_player_play
+        }
+        val descriptionRes = if (state.hasActiveSession && state.playWhenReady) {
+            R.string.player_pause_content_description
+        } else {
+            R.string.player_play_content_description
+        }
+        playPauseButton.setImageResource(iconRes)
+        playPauseButton.contentDescription = getString(descriptionRes)
+    }
+
+    private fun updateTopChrome() {
+        titleView.text = resolveActiveTitle()
+    }
+
+    private fun renderChromeLayout(rootHeight: Int) {
+        if (rootHeight <= 0) {
+            return
+        }
+
+        val compactChrome = rootHeight - topSystemInsetPx - bottomSystemInsetPx <
+            resources.getDimensionPixelSize(R.dimen.player_compact_height_threshold)
+        val horizontalPadding = resources.getDimensionPixelSize(R.dimen.player_chrome_horizontal_padding)
+        val topVerticalPadding = resources.getDimensionPixelSize(
+            if (compactChrome) {
+                R.dimen.player_chrome_compact_vertical_padding
+            } else {
+                R.dimen.player_top_chrome_vertical_padding
+            }
+        )
+        val bottomTopPadding = resources.getDimensionPixelSize(
+            if (compactChrome) {
+                R.dimen.player_chrome_compact_vertical_padding
+            } else {
+                R.dimen.player_bottom_chrome_top_padding
+            }
+        )
+        val bottomBottomPadding = resources.getDimensionPixelSize(
+            if (compactChrome) {
+                R.dimen.player_chrome_compact_bottom_padding
+            } else {
+                R.dimen.player_bottom_chrome_bottom_padding
+            }
+        )
+        val transportRowTopMargin = resources.getDimensionPixelSize(
+            if (compactChrome) {
+                R.dimen.player_transport_row_margin_top_compact
+            } else {
+                R.dimen.player_transport_row_margin_top
+            }
+        )
+
+        topChrome.updatePadding(
+            left = horizontalPadding,
+            top = topVerticalPadding + topSystemInsetPx,
+            right = horizontalPadding,
+            bottom = bottomTopPadding
+        )
+        bottomChrome.updatePadding(
+            left = horizontalPadding,
+            top = bottomTopPadding,
+            right = horizontalPadding,
+            bottom = bottomBottomPadding + bottomSystemInsetPx
+        )
+        (transportRow.layoutParams as? ViewGroup.MarginLayoutParams)?.let { layoutParams ->
+            if (layoutParams.topMargin != transportRowTopMargin) {
+                layoutParams.topMargin = transportRowTopMargin
+                transportRow.layoutParams = layoutParams
+            }
+        }
+    }
+
+    private fun formatPlaybackTime(positionMs: Long): String {
+        val totalSeconds = positionMs.coerceAtLeast(0L) / 1_000L
+        val seconds = totalSeconds % 60L
+        val minutes = (totalSeconds / 60L) % 60L
+        val hours = totalSeconds / 3_600L
+        return if (hours > 0L) {
+            String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.ROOT, "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    private fun resolveActiveTitle(): String {
+        val request = activeRequest ?: pendingLaunch?.request
+        val source = request
+            ?.sources
+            ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
+
+        return source?.displayLabel
+            ?.takeIf { it.isNotBlank() }
+            ?: source?.uriValue?.let(::deriveTitleFromUri)
+            ?: getString(R.string.player_title_fallback)
+    }
+
+    private fun deriveTitleFromUri(uriValue: String): String? {
+        val uri = Uri.parse(uriValue)
+        val lastSegment = uri.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+        if (lastSegment != null) {
+            return lastSegment
+        }
+
+        return uri.host?.takeIf { it.isNotBlank() }
+    }
+
     private fun syncPlayerState() {
         if (!playerManager.currentState().hasActiveSession) {
             playerView.player = null
         }
+        updateBottomChrome()
     }
 
     private fun showMessage(@StringRes messageResId: Int) {

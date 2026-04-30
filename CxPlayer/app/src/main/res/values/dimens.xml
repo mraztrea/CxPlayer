@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="player_chrome_horizontal_padding">16dp</dimen>
+    <dimen name="player_top_chrome_vertical_padding">16dp</dimen>
+    <dimen name="player_bottom_chrome_top_padding">12dp</dimen>
+    <dimen name="player_bottom_chrome_bottom_padding">16dp</dimen>
+    <dimen name="player_chrome_compact_vertical_padding">8dp</dimen>
+    <dimen name="player_chrome_compact_bottom_padding">8dp</dimen>
+    <dimen name="player_top_region_min_height">48dp</dimen>
+    <dimen name="player_timeline_row_min_height">40dp</dimen>
+    <dimen name="player_transport_row_min_height">56dp</dimen>
+    <dimen name="player_transport_row_margin_top">12dp</dimen>
+    <dimen name="player_transport_row_margin_top_compact">8dp</dimen>
+    <dimen name="player_time_label_spacing">12dp</dimen>
+    <dimen name="player_time_label_min_width">44dp</dimen>
+    <dimen name="player_time_text_size">12sp</dimen>
+    <dimen name="player_transport_button_size">48dp</dimen>
+    <dimen name="player_transport_primary_button_size">56dp</dimen>
+    <dimen name="player_transport_button_padding">12dp</dimen>
+    <dimen name="player_transport_primary_button_padding">14dp</dimen>
+    <dimen name="player_transport_button_spacing">12dp</dimen>
+    <dimen name="player_transport_secondary_spacing">4dp</dimen>
+    <dimen name="player_compact_height_threshold">480dp</dimen>
+</resources>

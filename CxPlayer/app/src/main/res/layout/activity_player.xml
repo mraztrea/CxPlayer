@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/playerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/black">
@@ -12,4 +13,171 @@
         app:show_buffering="when_playing"
         app:surface_type="texture_view"
         app:use_controller="false" />
+
+    <LinearLayout
+        android:id="@+id/playerTopChrome"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_player_chrome_scrim"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/player_chrome_horizontal_padding"
+        android:paddingTop="@dimen/player_top_chrome_vertical_padding"
+        android:paddingEnd="@dimen/player_chrome_horizontal_padding"
+        android:paddingBottom="@dimen/player_bottom_chrome_top_padding">
+
+        <LinearLayout
+            android:id="@+id/playerTopRegion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="@dimen/player_top_region_min_height"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/playerBackButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_back_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_back" />
+
+            <TextView
+                android:id="@+id/playerTitleView"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:layout_marginEnd="@dimen/player_transport_button_spacing"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/player_title_fallback"
+                android:textColor="@android:color/white"
+                android:textSize="16sp" />
+
+            <ImageButton
+                android:id="@+id/playerOverflowButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_overflow_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_overflow" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/playerBottomChrome"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_player_chrome_scrim"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/player_chrome_horizontal_padding"
+        android:paddingTop="@dimen/player_bottom_chrome_top_padding"
+        android:paddingEnd="@dimen/player_chrome_horizontal_padding"
+        android:paddingBottom="@dimen/player_bottom_chrome_bottom_padding">
+
+        <LinearLayout
+            android:id="@+id/playerTimelineRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="@dimen/player_timeline_row_min_height"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/playerCurrentTimeView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/player_time_label_spacing"
+                android:gravity="center"
+                android:minWidth="@dimen/player_time_label_min_width"
+                android:text="@string/player_time_placeholder"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/player_time_text_size" />
+
+            <SeekBar
+                android:id="@+id/playerSeekBar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:max="1000"
+                android:progress="0"
+                android:progressTint="@android:color/white"
+                android:splitTrack="false"
+                android:thumbTint="@android:color/white" />
+
+            <TextView
+                android:id="@+id/playerDurationView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/player_time_label_spacing"
+                android:gravity="center"
+                android:minWidth="@dimen/player_time_label_min_width"
+                android:text="@string/player_time_placeholder"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/player_time_text_size" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/playerTransportRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/player_transport_row_margin_top"
+            android:gravity="center"
+            android:minHeight="@dimen/player_transport_row_min_height"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/playerSeekBackButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_seek_back_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_seek_back" />
+
+            <ImageButton
+                android:id="@+id/playerPlayPauseButton"
+                android:layout_width="@dimen/player_transport_primary_button_size"
+                android:layout_height="@dimen/player_transport_primary_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:layout_marginEnd="@dimen/player_transport_button_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_play_content_description"
+                android:padding="@dimen/player_transport_primary_button_padding"
+                app:srcCompat="@drawable/ic_player_play" />
+
+            <ImageButton
+                android:id="@+id/playerSeekForwardButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_seek_forward_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_seek_forward" />
+
+            <ImageButton
+                android:id="@+id/playerVolumeButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_volume_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_volume" />
+
+            <ImageButton
+                android:id="@+id/playerSettingsButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_secondary_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_settings_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_settings" />
+        </LinearLayout>
+    </LinearLayout>
 </FrameLayout>
