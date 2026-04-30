@@ -8,6 +8,7 @@ import com.cxplayer.ui.player.PlaybackRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -112,6 +113,71 @@ class CxPlayerManagerTest {
 
         manager.seekTo(-500L)
         assertEquals(0L, session.currentPositionMsValue)
+    }
+
+    @Test
+    fun `load falls back to request defaults when snapshot index is out of bounds`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        val state = manager.load(
+            request = buildRequest(startIndex = 0, startPositionMs = 3_500L),
+            snapshot = PlaybackSnapshot(
+                currentIndex = 4,
+                currentPositionMs = 9_500L,
+                playWhenReady = false
+            )
+        )
+        val session = factory.lastSession()
+
+        assertEquals(0, session.lastStartIndex)
+        assertEquals(3_500L, session.lastStartPositionMs)
+        assertTrue(session.playWhenReady)
+        assertEquals(PlaybackSessionState.Playing, state.sessionState)
+    }
+
+    @Test
+    fun `release is idempotent and clears exported snapshot`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        manager.load(buildRequest(startIndex = 1, startPositionMs = 2_500L))
+        val session = factory.lastSession()
+
+        manager.release()
+        manager.release()
+
+        val state = manager.currentState()
+        assertTrue(session.released)
+        assertNull(manager.exportSnapshot())
+        assertEquals(PlaybackSessionState.Released, state.sessionState)
+        assertFalse(state.hasActiveSession)
+    }
+
+    @Test
+    fun `load restores exported snapshot after temporary release for the same request`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 1_000L))
+        val firstSession = factory.lastSession()
+        firstSession.currentMediaItemIndexValue = 1
+        firstSession.currentPositionMsValue = 7_500L
+        firstSession.playWhenReady = false
+        val snapshot = manager.exportSnapshot()
+
+        manager.release()
+        val restoredState = manager.load(
+            request = buildRequest(startIndex = 0, startPositionMs = 1_000L),
+            snapshot = snapshot
+        )
+        val restoredSession = factory.lastSession()
+
+        assertEquals(2, factory.createdSessions.size)
+        assertEquals(1, restoredSession.lastStartIndex)
+        assertEquals(7_500L, restoredSession.lastStartPositionMs)
+        assertFalse(restoredSession.playWhenReady)
+        assertEquals(PlaybackSessionState.Paused, restoredState.sessionState)
     }
 
     private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {

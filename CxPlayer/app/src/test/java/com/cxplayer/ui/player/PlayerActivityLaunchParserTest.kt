@@ -194,4 +194,55 @@ class PlayerActivityLaunchParserTest {
         val rejected = outcome as LaunchOutcome.Rejected
         assertEquals(R.string.player_launch_error_unsupported_source, rejected.messageResId)
     }
+
+    @Test
+    fun `revalidateRequest keeps a valid explicit request playable`() {
+        val request = PlaybackRequest(
+            sources = listOf(
+                MediaSourceRef(
+                    uriValue = "https://example.com/demo.mp4",
+                    scheme = MediaScheme.Https,
+                    mimeType = "video/mp4",
+                    isPlayableCandidate = true,
+                    displayLabel = "demo.mp4"
+                )
+            ),
+            startIndex = 0,
+            startPositionMs = 2_500L,
+            origin = LaunchOrigin.InternalExplicit,
+            rawAction = null
+        )
+
+        val outcome = PlaybackRequestParser.revalidateRequest(request, resolver = null)
+
+        assertTrue(outcome is LaunchOutcome.Ready)
+        val ready = outcome as LaunchOutcome.Ready
+        assertEquals(0, ready.selectedIndex)
+        assertEquals(2_500L, ready.request.startPositionMs)
+    }
+
+    @Test
+    fun `revalidateRequest rejects inaccessible local file request`() {
+        val request = PlaybackRequest(
+            sources = listOf(
+                MediaSourceRef(
+                    uriValue = "file:///definitely-missing-video.mp4",
+                    scheme = MediaScheme.File,
+                    mimeType = "video/mp4",
+                    isPlayableCandidate = true,
+                    displayLabel = "definitely-missing-video.mp4"
+                )
+            ),
+            startIndex = 0,
+            startPositionMs = 2_500L,
+            origin = LaunchOrigin.InternalExplicit,
+            rawAction = null
+        )
+
+        val outcome = PlaybackRequestParser.revalidateRequest(request, resolver = null)
+
+        assertTrue(outcome is LaunchOutcome.Rejected)
+        val rejected = outcome as LaunchOutcome.Rejected
+        assertEquals(R.string.player_launch_error_unsupported_source, rejected.messageResId)
+    }
 }

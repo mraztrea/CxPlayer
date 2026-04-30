@@ -112,6 +112,12 @@ class CxPlayerManager internal constructor(
     }
 
     fun release() {
+        if (session == null) {
+            detach()
+            latestState = PlaybackStateSnapshot(sessionState = PlaybackSessionState.Released)
+            return
+        }
+
         detach()
         session?.release()
         session = null

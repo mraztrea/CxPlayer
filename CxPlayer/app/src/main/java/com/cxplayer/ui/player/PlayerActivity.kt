@@ -75,7 +75,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingSnapshot = null
+        clearPendingSnapshot()
         updatePendingLaunch(intent)
         updateTopChrome()
         if (!isFinishing) {
@@ -106,7 +106,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        playerManager.release()
+        if (isFinishing) {
+            clearPlaybackSession(resetRequest = true)
+        } else {
+            playerManager.release()
+            syncPlayerState()
+        }
         super.onDestroy()
     }
 
@@ -172,7 +177,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun beginPlaybackSession() {
-        val launch = pendingLaunch ?: return
+        val launch = resolvePendingLaunchForPlayback() ?: return
+        pendingLaunch = launch
         activeRequest = launch.request
         playerManager.attach(playerView)
         playerManager.load(
@@ -188,8 +194,49 @@ class PlayerActivity : AppCompatActivity() {
         updateTopChrome()
     }
 
+    private fun resolvePendingLaunchForPlayback(): PendingLaunch? {
+        val launch = pendingLaunch ?: return null
+        val snapshot = pendingSnapshot ?: return launch
+
+        return when (val outcome = PlaybackRequestParser.revalidateRequest(launch.request, contentResolver)) {
+            is LaunchOutcome.Ready -> launch.copy(request = outcome.request)
+
+            is LaunchOutcome.FallbackSelected -> launch.copy(
+                request = outcome.request,
+                messageResId = launch.messageResId ?: R.string.player_launch_error_restore_failed
+            )
+
+            is LaunchOutcome.Rejected -> {
+                handleRestoreFailure(snapshot)
+                null
+            }
+        }
+    }
+
     private fun captureSnapshot() {
         pendingSnapshot = playerManager.exportSnapshot() ?: pendingSnapshot
+    }
+
+    private fun handleRestoreFailure(snapshot: PlaybackSnapshot) {
+        clearPlaybackSession(resetRequest = true)
+        showMessage(R.string.player_launch_error_restore_failed)
+        currentTimeView.text = formatPlaybackTime(snapshot.currentPositionMs)
+        durationView.text = getString(R.string.player_time_placeholder)
+        updateTopChrome()
+    }
+
+    private fun clearPendingSnapshot() {
+        pendingSnapshot = null
+    }
+
+    private fun clearPlaybackSession(resetRequest: Boolean) {
+        clearPendingSnapshot()
+        if (resetRequest) {
+            pendingLaunch = null
+            activeRequest = null
+        }
+        playerManager.release()
+        syncPlayerState()
     }
 
     private fun restoreSnapshot(savedInstanceState: Bundle?): PlaybackSnapshot? {
@@ -573,6 +620,34 @@ object PlaybackRequestParser {
         }
     }
 
+    fun revalidateRequest(
+        request: PlaybackRequest,
+        resolver: ContentResolver?
+    ): LaunchOutcome {
+        if (request.sources.isEmpty()) {
+            return LaunchOutcome.Rejected(R.string.player_launch_error_missing_source)
+        }
+
+        val sourceCandidates = request.sources.map { source ->
+            val normalizedValue = normalizeUriValue(source.uriValue)
+            LaunchSourceCandidate(
+                rawValue = normalizedValue,
+                mimeType = source.mimeType?.lowercase(Locale.ROOT),
+                isAccessible = canAccessSource(normalizedValue, source.scheme, resolver)
+            )
+        }
+
+        return fromInput(
+            LaunchRequestInput(
+                sources = sourceCandidates,
+                startIndex = request.startIndex,
+                startPositionMs = request.startPositionMs,
+                origin = request.origin,
+                rawAction = request.rawAction
+            )
+        )
+    }
+
     private fun extractUris(intent: Intent): List<Uri> {
         val extraUris = getParcelableUris(intent)
         if (!extraUris.isNullOrEmpty()) {
@@ -686,6 +761,32 @@ object PlaybackRequestParser {
                 } else {
                     try {
                         resolver.openAssetFileDescriptor(uri, "r")?.close()
+                        true
+                    } catch (_: SecurityException) {
+                        false
+                    } catch (_: FileNotFoundException) {
+                        false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun canAccessSource(
+        uriValue: String,
+        mediaScheme: MediaScheme,
+        resolver: ContentResolver?
+    ): Boolean {
+        return when (mediaScheme) {
+            MediaScheme.Http, MediaScheme.Https -> true
+            MediaScheme.File -> parseUri(uriValue)?.path?.let { File(it).exists() } == true
+            MediaScheme.Content -> {
+                if (resolver == null) {
+                    true
+                } else {
+                    val parsedUri = Uri.parse(uriValue)
+                    try {
+                        resolver.openAssetFileDescriptor(parsedUri, "r")?.close()
                         true
                     } catch (_: SecurityException) {
                         false
