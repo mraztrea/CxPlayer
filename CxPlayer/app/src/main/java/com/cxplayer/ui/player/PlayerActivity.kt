@@ -114,6 +114,22 @@ class PlayerActivity : AppCompatActivity() {
         pendingSnapshot = restoreSnapshot(savedInstanceState)
         updatePendingLaunch(intent)
         updateTopChrome()
+        ensureStoragePermission()
+    }
+
+    private fun ensureStoragePermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                runCatching {
+                    startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

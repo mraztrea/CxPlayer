@@ -682,9 +682,9 @@ internal class SubtitleManager(
 
     private fun copyToCacheAndGetUri(file: File): Uri? {
         val ctx = appContext ?: return null
+        val subtitleCacheDir = File(ctx.cacheDir, "subtitles")
+        subtitleCacheDir.mkdirs()
         return runCatching {
-            val subtitleCacheDir = File(ctx.cacheDir, "subtitles")
-            subtitleCacheDir.mkdirs()
             val cachedFile = File(subtitleCacheDir, file.name)
             file.inputStream().use { input ->
                 cachedFile.outputStream().use { output ->
@@ -694,7 +694,59 @@ internal class SubtitleManager(
             Log.d(TAG, "copyToCache: copied '${file.name}' to '${cachedFile.absolutePath}'")
             Uri.fromFile(cachedFile)
         }.onFailure { e ->
-            Log.d(TAG, "copyToCache: FAILED for '${file.name}': ${e.message}")
+            Log.d(TAG, "copyToCache: direct copy FAILED for '${file.name}': ${e.message}, trying MediaStore fallback")
+        }.getOrNull()
+            ?: copyViaMedisStoreUri(file, subtitleCacheDir)
+    }
+
+    private fun copyViaMedisStoreUri(file: File, cacheDir: File): Uri? {
+        val resolver = contentResolver ?: return null
+        // Query MediaStore.Files for this exact file by display name + relative path
+        val fileName = file.name
+        val parentPath = file.parentFile?.absolutePath ?: return null
+        val relativePath = parentPath.removePrefix("/storage/emulated/0/").let {
+            if (it == parentPath) null else it
+        }
+
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID)
+        val selection = if (relativePath != null) {
+            "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ? AND ${MediaStore.Files.FileColumns.RELATIVE_PATH} LIKE ?"
+        } else {
+            "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ?"
+        }
+        val selectionArgs = if (relativePath != null) {
+            arrayOf(fileName, "%$relativePath%")
+        } else {
+            arrayOf(fileName)
+        }
+
+        val contentUri = runCatching {
+            resolver.query(
+                MediaStore.Files.getContentUri("external"),
+                projection, selection, selectionArgs, null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
+                    android.content.ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
+                } else null
+            }
+        }.getOrNull()
+
+        if (contentUri == null) {
+            Log.d(TAG, "copyToCache: MediaStore query found nothing for '$fileName'")
+            return null
+        }
+
+        Log.d(TAG, "copyToCache: found MediaStore URI=$contentUri for '$fileName'")
+        return runCatching {
+            val cachedFile = File(cacheDir, fileName)
+            resolver.openInputStream(contentUri)?.use { input ->
+                cachedFile.outputStream().use { output -> input.copyTo(output) }
+            } ?: throw java.io.IOException("openInputStream returned null")
+            Log.d(TAG, "copyToCache: MediaStore copy SUCCESS -> '${cachedFile.absolutePath}'")
+            Uri.fromFile(cachedFile)
+        }.onFailure { e ->
+            Log.d(TAG, "copyToCache: MediaStore copy FAILED: ${e.message}")
         }.getOrNull()
     }
 
