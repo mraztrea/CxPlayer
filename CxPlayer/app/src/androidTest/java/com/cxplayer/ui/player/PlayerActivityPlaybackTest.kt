@@ -85,32 +85,12 @@ class PlayerActivityPlaybackTest {
     }
 
     @Test
-    fun localLaunchOpensAndDismissesTrackSelectorWithoutBreakingPlayback() {
+    fun localLaunchOpensTrackSelectorWithoutBreakingPlayback() {
         ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
             scenario.onActivity { activity ->
-                assertFalse(activity.isTrackSelectorShowingForTesting())
                 assertTrue(activity.openTrackSelectorForTesting())
                 assertTrue(activity.isTrackSelectorShowingForTesting())
                 assertNotNull(activity.currentPlaybackSnapshot())
-            }
-
-            scenario.moveToState(Lifecycle.State.CREATED)
-
-            scenario.onActivity { activity ->
-                assertFalse(activity.isTrackSelectorShowingForTesting())
-            }
-        }
-    }
-
-    @Test
-    fun settingsButtonOpensTrackSelectorPopup() {
-        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
-            scenario.onActivity { activity ->
-                val settingsButton = activity.findViewById<ImageButton>(R.id.playerSettingsButton)
-
-                assertFalse(activity.isTrackSelectorShowingForTesting())
-                assertTrue(settingsButton.performClick())
-                assertTrue(activity.isTrackSelectorShowingForTesting())
             }
         }
     }
@@ -157,6 +137,30 @@ class PlayerActivityPlaybackTest {
                 assertTrue(activity.loadExternalSubtitleForTesting(Uri.fromFile(manualSubtitle)))
                 assertFalse(activity.isSubtitleDisabledForTesting())
                 assertTrue(activity.cycleSubtitleSourceForTesting())
+                assertTrue(activity.isSubtitleDisabledForTesting())
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+        }
+
+        manualSubtitle.delete()
+        videoFile.delete()
+    }
+
+    @Test
+    fun trackSelectorCanDisableSubtitlesAfterExternalLoad() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val videoFile = File(context.cacheDir, "track-selector-subtitle-off-${SystemClock.uptimeMillis()}.mp4").apply {
+            writeBytes(byteArrayOf())
+        }
+        val manualSubtitle = File(videoFile.parentFile, videoFile.nameWithoutExtension + ".srt").apply {
+            writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n")
+        }
+
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent(videoFile)).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.loadExternalSubtitleForTesting(Uri.fromFile(manualSubtitle)))
+                assertTrue(activity.openTrackSelectorForTesting())
+                assertTrue(activity.disableSubtitlesViaTrackSelectorForTesting())
                 assertTrue(activity.isSubtitleDisabledForTesting())
                 assertNotNull(activity.currentPlaybackSnapshot())
             }

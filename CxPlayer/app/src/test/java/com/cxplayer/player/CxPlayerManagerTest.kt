@@ -1,5 +1,6 @@
 package com.cxplayer.player
 
+import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.common.Player
 import com.cxplayer.ui.player.LaunchOrigin
@@ -33,6 +34,23 @@ class CxPlayerManagerTest {
         assertEquals(10_000L, configuration.seekBackIncrementMs)
         assertEquals(10_000L, configuration.seekForwardIncrementMs)
         assertEquals(CxRenderersFactory::class.java.name, configuration.renderersFactoryClassName)
+        assertEquals(CxMediaSourceFactory::class.java.name, configuration.mediaSourceFactoryClassName)
+        assertEquals(50_000, configuration.loadControlPolicy.minBufferMs)
+        assertEquals(120_000, configuration.loadControlPolicy.maxBufferMs)
+    }
+
+    @Test
+    fun `wake mode resolves to network for remote playback schemes`() {
+        val smbScheme = MediaScheme.fromScheme("smb") ?: error("Expected smb scheme to resolve")
+
+        assertEquals(C.WAKE_MODE_NETWORK, resolveWakeModeForSource(buildSource("https://example.com/alpha.mp4", MediaScheme.Https)))
+        assertEquals(C.WAKE_MODE_NETWORK, resolveWakeModeForSource(buildSource("smb://server/share/movie.mkv", smbScheme)))
+    }
+
+    @Test
+    fun `wake mode resolves to local for file playback schemes`() {
+        assertEquals(C.WAKE_MODE_LOCAL, resolveWakeModeForSource(buildSource("file:///storage/emulated/0/Movies/movie.mp4", MediaScheme.File)))
+        assertEquals(C.WAKE_MODE_LOCAL, resolveWakeModeForSource(buildSource("content://media/external/video/media/1", MediaScheme.Content)))
     }
 
     @Test
@@ -72,8 +90,19 @@ class CxPlayerManagerTest {
         assertEquals(1, session.lastStartIndex)
         assertEquals(1_500L, session.lastStartPositionMs)
         assertTrue(session.playWhenReady)
+        assertEquals(C.WAKE_MODE_NETWORK, session.lastWakeMode)
         assertEquals(PlaybackSessionState.Playing, state.sessionState)
         assertEquals(1, state.currentIndex)
+    }
+
+    @Test
+    fun `load applies local wake mode for local media`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L, sources = listOf(buildSource("file:///storage/emulated/0/Movies/local.mp4", MediaScheme.File))))
+
+        assertEquals(C.WAKE_MODE_LOCAL, factory.lastSession().lastWakeMode)
     }
 
     @Test
@@ -200,46 +229,35 @@ class CxPlayerManagerTest {
         assertNull(manager.subtitleSessionController())
     }
 
-    @Test
-    fun `track selector session controller is available for active playback and cleared on release`() {
-        val factory = FakePlayerSessionFactory()
-        val manager = CxPlayerManager(factory)
-
-        assertNull(manager.trackSelectorSessionController())
-
-        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L))
-
-        assertNotNull(manager.activePlayer())
-        assertNotNull(manager.trackSelectorSessionController())
-
-        manager.release()
-
-        assertNull(manager.activePlayer())
-        assertNull(manager.trackSelectorSessionController())
-    }
-
-    private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {
+    private fun buildRequest(
+        startIndex: Int,
+        startPositionMs: Long,
+        sources: List<MediaSourceRef> = listOf(
+            buildSource("https://example.com/alpha.mp4", MediaScheme.Https, "video/mp4", "alpha"),
+            buildSource("https://example.com/beta.webm", MediaScheme.Https, "video/webm", "beta")
+        )
+    ): PlaybackRequest {
         return PlaybackRequest(
-            sources = listOf(
-                MediaSourceRef(
-                    uriValue = "https://example.com/alpha.mp4",
-                    scheme = MediaScheme.Https,
-                    mimeType = "video/mp4",
-                    isPlayableCandidate = true,
-                    displayLabel = "alpha"
-                ),
-                MediaSourceRef(
-                    uriValue = "https://example.com/beta.webm",
-                    scheme = MediaScheme.Https,
-                    mimeType = "video/webm",
-                    isPlayableCandidate = true,
-                    displayLabel = "beta"
-                )
-            ),
+            sources = sources,
             startIndex = startIndex,
             startPositionMs = startPositionMs,
             origin = LaunchOrigin.InternalExplicit,
             rawAction = null
+        )
+    }
+
+    private fun buildSource(
+        uriValue: String,
+        scheme: MediaScheme,
+        mimeType: String? = "video/mp4",
+        displayLabel: String? = uriValue.substringAfterLast('/')
+    ): MediaSourceRef {
+        return MediaSourceRef(
+            uriValue = uriValue,
+            scheme = scheme,
+            mimeType = mimeType,
+            isPlayableCandidate = true,
+            displayLabel = displayLabel
         )
     }
 }
@@ -270,6 +288,7 @@ private class FakePlayerSession : PlayerSession {
     var lastSourceUris: List<String> = emptyList()
     var lastStartIndex: Int = 0
     var lastStartPositionMs: Long = 0L
+    var lastWakeMode: Int = C.WAKE_MODE_LOCAL
 
     override val currentPositionMs: Long
         get() = currentPositionMsValue
@@ -279,6 +298,10 @@ private class FakePlayerSession : PlayerSession {
 
     override val durationMs: Long
         get() = durationMsValue
+
+    override fun setWakeMode(wakeMode: Int) {
+        lastWakeMode = wakeMode
+    }
 
     override fun setMediaItems(sourceUris: List<String>, startIndex: Int, startPositionMs: Long) {
         lastSourceUris = sourceUris

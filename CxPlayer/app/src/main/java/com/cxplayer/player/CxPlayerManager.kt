@@ -7,6 +7,8 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.cxplayer.ui.player.MediaScheme
+import com.cxplayer.ui.player.MediaSourceRef
 import com.cxplayer.ui.player.PlaybackRequest
 
 private const val TRANSPORT_SEEK_INCREMENT_MS = 10_000L
@@ -17,15 +19,38 @@ private const val MAX_PLAYBACK_SPEED = 2f
 internal data class PlayerSessionConfigurationSnapshot(
     val seekBackIncrementMs: Long,
     val seekForwardIncrementMs: Long,
-    val renderersFactoryClassName: String
+    val renderersFactoryClassName: String,
+    val mediaSourceFactoryClassName: String,
+    val loadControlPolicy: CxLoadControlPolicySnapshot
 )
 
 internal fun playerSessionConfigurationSnapshot(): PlayerSessionConfigurationSnapshot {
     return PlayerSessionConfigurationSnapshot(
         seekBackIncrementMs = TRANSPORT_SEEK_INCREMENT_MS,
         seekForwardIncrementMs = TRANSPORT_SEEK_INCREMENT_MS,
-        renderersFactoryClassName = CxRenderersFactory::class.java.name
+        renderersFactoryClassName = CxRenderersFactory::class.java.name,
+        mediaSourceFactoryClassName = CxMediaSourceFactory::class.java.name,
+        loadControlPolicy = cxLoadControlPolicySnapshot()
     )
+}
+
+internal fun requiresNetworkWakeMode(scheme: MediaScheme): Boolean {
+    return when (scheme) {
+        MediaScheme.Http,
+        MediaScheme.Https,
+        MediaScheme.Smb -> true
+
+        MediaScheme.Content,
+        MediaScheme.File -> false
+    }
+}
+
+internal fun resolveWakeModeForSource(source: MediaSourceRef?): Int {
+    return if (source != null && requiresNetworkWakeMode(source.scheme)) {
+        C.WAKE_MODE_NETWORK
+    } else {
+        C.WAKE_MODE_LOCAL
+    }
 }
 
 class CxPlayerManager internal constructor(
@@ -71,6 +96,7 @@ class CxPlayerManager internal constructor(
 
         playlistSize = sourceUris.size
         bindAttachedView(currentSession)
+        currentSession.setWakeMode(resolveWakeModeForSource(request.sources.getOrNull(targetIndex)))
         currentSession.setMediaItems(sourceUris, targetIndex, targetPosition)
         currentSession.playbackSpeed = DEFAULT_PLAYBACK_SPEED
         currentSession.prepare()
@@ -261,6 +287,8 @@ internal interface PlayerSession {
     val playbackState: Int
     val hasError: Boolean
 
+    fun setWakeMode(wakeMode: Int)
+
     fun setMediaItems(sourceUris: List<String>, startIndex: Int, startPositionMs: Long)
 
     fun prepare()
@@ -276,8 +304,12 @@ private class ExoPlayerSessionFactory(
     override fun create(): PlayerSession {
         val configuration = playerSessionConfigurationSnapshot()
         val renderersFactory = CxRenderersFactory(context)
+        val mediaSourceFactory = CxMediaSourceFactory(context).create()
         val exoPlayer = ExoPlayer.Builder(context)
             .setRenderersFactory(renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(buildCxLoadControl())
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .setSeekBackIncrementMs(configuration.seekBackIncrementMs)
             .setSeekForwardIncrementMs(configuration.seekForwardIncrementMs)
             .build()
@@ -317,6 +349,10 @@ private class ExoPlayerSession(
 
     override val hasError: Boolean
         get() = exoPlayer.playerError != null
+
+    override fun setWakeMode(wakeMode: Int) {
+        exoPlayer.setWakeMode(wakeMode)
+    }
 
     override fun setMediaItems(sourceUris: List<String>, startIndex: Int, startPositionMs: Long) {
         val mediaItems = sourceUris.map { MediaItem.fromUri(it) }

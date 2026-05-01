@@ -194,14 +194,14 @@
                 app:srcCompat="@drawable/ic_player_seek_forward" />
 
             <ImageButton
-                android:id="@+id/playerVolumeButton"
+                android:id="@+id/playerTrackSelectorButton"
                 android:layout_width="@dimen/player_transport_button_size"
                 android:layout_height="@dimen/player_transport_button_size"
                 android:layout_marginStart="@dimen/player_transport_button_spacing"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/player_volume_content_description"
+                android:contentDescription="@string/player_track_selector_content_description"
                 android:padding="@dimen/player_transport_button_padding"
-                app:srcCompat="@drawable/ic_player_volume" />
+                app:srcCompat="@drawable/ic_player_track_selector" />
 
             <ImageButton
                 android:id="@+id/playerSettingsButton"

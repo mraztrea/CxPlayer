@@ -14,8 +14,8 @@
 - [ ] 3.4 SubtitleManager: auto-detect subtitle file next to video
 - [ ] 3.5 SubtitleManager: embedded subtitle track selection
 - [ ] 3.6 Subtitle styling (font size, bold, color, edge)
-- [ ] 3.7 Audio track selection
-- [ ] 3.8 Track Selector UI (PopupWindow)
+- [x] 3.7 Audio track selection
+- [x] 3.8 Track Selector UI (PopupWindow)
 - [ ] 3.9 Playlist / queue support (multiple videos)
 - [ ] 3.10 Shuffle mode + Next/Previous controls
 

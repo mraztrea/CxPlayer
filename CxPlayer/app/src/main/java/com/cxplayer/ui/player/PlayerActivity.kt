@@ -23,13 +23,17 @@ import androidx.core.view.updatePadding
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
 import com.cxplayer.databinding.ActivityPlayerBinding
+import com.cxplayer.network.NetworkCredentialSet
+import com.cxplayer.network.SharedLibraryEntry
+import com.cxplayer.network.SharedLibraryEntryType
 import com.cxplayer.player.AudioTrackDescriptor
 import com.cxplayer.player.CxPlayerManager
 import com.cxplayer.player.PlaybackSnapshot
 import com.cxplayer.player.PlaybackStateSnapshot
 import com.cxplayer.player.SubtitleSourceDescriptor
+import com.cxplayer.player.SubtitleSourceKind
 import com.cxplayer.player.SubtitleManager
-import com.cxplayer.player.TrackSelectorSessionController
+import com.cxplayer.ui.controls.NetworkBrowserDialog
 import com.cxplayer.ui.controls.TrackSelector
 import com.cxplayer.ui.controls.TrackSelectorOptionUiModel
 import com.cxplayer.ui.controls.TrackSelectorSection
@@ -48,6 +52,7 @@ private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
 private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
 private const val STATE_SUBTITLE_DISABLED_BY_USER = "state_subtitle_disabled_by_user"
 private const val STATE_SUBTITLE_STYLE_PRESET_INDEX = "state_subtitle_style_preset_index"
+private const val ACTION_OPEN_INTERNAL_SMB = "com.cxplayer.action.OPEN_INTERNAL_SMB"
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -71,9 +76,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var seekBackButton: ImageButton
     private lateinit var playPauseButton: ImageButton
     private lateinit var seekForwardButton: ImageButton
-    private lateinit var volumeButton: ImageButton
+    private lateinit var trackSelectorButton: ImageButton
     private lateinit var settingsButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
+    private val networkBrowserDialog by lazy(LazyThreadSafetyMode.NONE) { NetworkBrowserDialog(this) }
     private val trackSelector by lazy(LazyThreadSafetyMode.NONE) { TrackSelector(this) }
     private val subtitlePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
@@ -85,6 +91,7 @@ class PlayerActivity : AppCompatActivity() {
     private var activeRequest: PlaybackRequest? = null
     private var subtitleDisabledByUser: Boolean = false
     private var subtitleStylePresetIndex: Int = 0
+    private var lastSmbCredentialSet: NetworkCredentialSet? = null
     private var topSystemInsetPx: Int = 0
     private var bottomSystemInsetPx: Int = 0
     private var currentWindowBrightness: Float = 0.5f
@@ -114,22 +121,6 @@ class PlayerActivity : AppCompatActivity() {
         pendingSnapshot = restoreSnapshot(savedInstanceState)
         updatePendingLaunch(intent)
         updateTopChrome()
-        ensureStoragePermission()
-    }
-
-    private fun ensureStoragePermission() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            if (!android.os.Environment.isExternalStorageManager()) {
-                runCatching {
-                    startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                            Uri.parse("package:$packageName")
-                        )
-                    )
-                }
-            }
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -164,6 +155,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         captureSnapshot()
+        networkBrowserDialog.dismiss()
         trackSelector.dismiss()
         subtitleManager = null
         playerManager.release()
@@ -172,6 +164,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        networkBrowserDialog.dismiss()
         trackSelector.dismiss()
         if (::gestureController.isInitialized) {
             gestureController.release()
@@ -215,12 +208,25 @@ class PlayerActivity : AppCompatActivity() {
 
     internal fun hasSubtitleManager(): Boolean = subtitleManager != null
 
-    internal fun isTrackSelectorShowingForTesting(): Boolean = trackSelector.isShowing()
+    internal fun openNetworkBrowserForTesting(): Boolean = showNetworkBrowser()
 
     internal fun openTrackSelectorForTesting(): Boolean = showTrackSelector()
 
-    internal fun currentAvailableAudioTrackCount(): Int {
-        return playerManager.trackSelectorSessionController()?.currentAudioTracks()?.size ?: 0
+    internal fun isTrackSelectorShowingForTesting(): Boolean = trackSelector.isShowing()
+
+    internal fun disableSubtitlesViaTrackSelectorForTesting(): Boolean {
+        val offSourceId = subtitleManager
+            ?.availableSubtitleSources()
+            ?.firstOrNull { descriptor -> descriptor.kind == SubtitleSourceKind.Off }
+            ?.id
+            ?: return false
+        handleTrackSelectorSelection(
+            TrackSelectorSelection(
+                section = TrackSelectorSection.Subtitle,
+                optionId = offSourceId
+            )
+        )
+        return isSubtitleDisabledForTesting()
     }
 
     internal fun currentAvailableSubtitleSourceCount(): Int {
@@ -308,7 +314,6 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun beginPlaybackSession() {
         val launch = pendingLaunch ?: return
-        trackSelector.dismiss()
         activeRequest = launch.request
         playerManager.attach(playerView)
         playerManager.load(
@@ -364,7 +369,7 @@ class PlayerActivity : AppCompatActivity() {
         seekBackButton = binding.playerSeekBackButton
         playPauseButton = binding.playerPlayPauseButton
         seekForwardButton = binding.playerSeekForwardButton
-        volumeButton = binding.playerVolumeButton
+        trackSelectorButton = binding.playerTrackSelectorButton
         settingsButton = binding.playerSettingsButton
     }
 
@@ -373,7 +378,8 @@ class PlayerActivity : AppCompatActivity() {
         backButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
-        overflowButton.setOnClickListener { launchSubtitlePicker() }
+        overflowButton.setOnClickListener { cycleSubtitleSource() }
+        overflowButton.setOnLongClickListener { showNetworkBrowser() }
     }
 
     private fun initializeBottomChrome() {
@@ -410,8 +416,8 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         seekForwardButton.setOnClickListener { seekForward() }
-        volumeButton.setOnClickListener { }
-        settingsButton.setOnClickListener { showTrackSelector() }
+        trackSelectorButton.setOnClickListener { showTrackSelector() }
+        settingsButton.setOnClickListener { launchSubtitlePicker() }
         settingsButton.setOnLongClickListener {
             val fontSize = advanceSubtitleStyleForTesting()
             if (fontSize > 0) {
@@ -429,8 +435,7 @@ class PlayerActivity : AppCompatActivity() {
             SubtitleManager(
                 sessionController = controller,
                 playerView = playerView,
-                contentResolver = contentResolver,
-                appContext = applicationContext
+                contentResolver = contentResolver
             ).also { manager ->
                 manager.applyStylePreset(subtitleStylePresetIndex)
             }
@@ -441,137 +446,231 @@ class PlayerActivity : AppCompatActivity() {
         if (subtitleManager == null) {
             return
         }
-        trackSelector.dismiss()
         subtitlePickerLauncher.launch(arrayOf("text/*", "application/octet-stream", "application/x-subrip"))
     }
 
-    private fun showTrackSelector(): Boolean {
-        autoDetectSubtitleForCurrentSource()
-        val model = buildTrackSelectorModel() ?: run {
-            showMessage(R.string.player_track_selector_feedback_selector_unavailable)
-            return false
-        }
-        trackSelector.show(settingsButton, model, ::handleTrackSelection)
+    private fun showNetworkBrowser(): Boolean {
+        networkBrowserDialog.show(
+            initialCredentialSet = lastSmbCredentialSet,
+            onPlayableFileSelected = ::playSelectedSmbEntry
+        )
         return true
     }
 
-    private fun buildTrackSelectorModel(): TrackSelectorUiModel? {
-        val controller = playerManager.trackSelectorSessionController()
-        val audioTracks = controller?.currentAudioTracks().orEmpty()
-        if (controller == null && subtitleManager == null) {
-            return null
+    private fun showTrackSelector(): Boolean {
+        val audioTracks = playerManager.trackSelectorSessionController()?.currentAudioTracks().orEmpty()
+        val subtitleSources = subtitleManager?.availableSubtitleSources().orEmpty()
+        if (audioTracks.isEmpty() && subtitleSources.isEmpty()) {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+            return false
         }
 
+        trackSelector.show(
+            anchor = trackSelectorButton,
+            model = buildTrackSelectorModel(audioTracks, subtitleSources),
+            onSelection = ::handleTrackSelectorSelection
+        )
+        return true
+    }
+
+    private fun buildTrackSelectorModel(
+        audioTracks: List<AudioTrackDescriptor>,
+        subtitleSources: List<SubtitleSourceDescriptor>
+    ): TrackSelectorUiModel {
         return TrackSelectorUiModel(
             audioSection = TrackSelectorSectionUiModel(
                 title = getString(R.string.player_track_selector_audio_title),
                 emptyLabel = getString(R.string.player_track_selector_audio_empty),
-                options = audioTracks.map(::toAudioOptionUiModel)
+                options = audioTracks.map { descriptor ->
+                    TrackSelectorOptionUiModel(
+                        id = descriptor.id,
+                        label = descriptor.label,
+                        isSelected = descriptor.isSelected,
+                        isEnabled = descriptor.isSelectable
+                    )
+                }
             ),
             subtitleSection = TrackSelectorSectionUiModel(
                 title = getString(R.string.player_track_selector_subtitle_title),
                 emptyLabel = getString(R.string.player_track_selector_subtitle_empty),
-                options = subtitleManager
-                    ?.availableSubtitleSources()
-                    .orEmpty()
-                    .map(::toSubtitleOptionUiModel)
+                options = subtitleSources.map { descriptor ->
+                    TrackSelectorOptionUiModel(
+                        id = descriptor.id,
+                        label = descriptor.label,
+                        isSelected = descriptor.isCurrentlySelected,
+                        isEnabled = true
+                    )
+                }
             )
         )
     }
 
-    private fun toAudioOptionUiModel(track: AudioTrackDescriptor): TrackSelectorOptionUiModel {
-        return TrackSelectorOptionUiModel(
-            id = track.id,
-            label = track.label,
-            isSelected = track.isSelected,
-            isEnabled = track.isSelectable
-        )
-    }
-
-    private fun toSubtitleOptionUiModel(source: SubtitleSourceDescriptor): TrackSelectorOptionUiModel {
-        val label = if (SubtitleManager.isOffSourceId(source.id)) {
-            getString(R.string.player_subtitle_feedback_none).substringAfter(": ").trim()
-        } else {
-            source.label
-        }
-        return TrackSelectorOptionUiModel(
-            id = source.id,
-            label = label,
-            isSelected = source.isCurrentlySelected,
-            isEnabled = true
-        )
-    }
-
-    private fun handleTrackSelection(selection: TrackSelectorSelection) {
+    private fun handleTrackSelectorSelection(selection: TrackSelectorSelection) {
         when (selection.section) {
-            TrackSelectorSection.Audio -> applySelectedAudioTrack(selection.optionId)
-            TrackSelectorSection.Subtitle -> applySelectedSubtitleTrack(selection.optionId)
+            TrackSelectorSection.Audio -> handleAudioTrackSelection(selection.optionId)
+            TrackSelectorSection.Subtitle -> handleSubtitleTrackSelection(selection.optionId)
         }
     }
 
-    private fun applySelectedAudioTrack(optionId: String) {
-        val controller = playerManager.trackSelectorSessionController() ?: return
-        val selectedTrack = controller.currentAudioTracks().firstOrNull { it.id == optionId } ?: return
-        val changed = controller.selectAudioTrack(
-            groupIndex = selectedTrack.groupIndex,
-            trackIndex = selectedTrack.trackIndex
-        )
-        if (!changed) {
+    private fun handleAudioTrackSelection(optionId: String) {
+        val controller = playerManager.trackSelectorSessionController() ?: run {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
             return
         }
-        showMessage(getString(R.string.player_track_selector_feedback_audio, selectedTrack.label))
-        syncPlayerState()
+        val descriptor = controller.currentAudioTracks().firstOrNull { track -> track.id == optionId } ?: run {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+            return
+        }
+        if (!descriptor.isSelectable) {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+            return
+        }
+        if (controller.selectAudioTrack(descriptor.groupIndex, descriptor.trackIndex)) {
+            showMessage(getString(R.string.player_audio_feedback_selected, descriptor.label))
+            syncPlayerState()
+        } else {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+        }
     }
 
-    private fun applySelectedSubtitleTrack(optionId: String) {
-        val manager = subtitleManager ?: return
-        val selectedSource = manager.availableSubtitleSources().firstOrNull { it.id == optionId }
-        android.util.Log.d("PlayerActivity", "applySubTrack: optionId=$optionId, found=${selectedSource != null}, sourceKind=${selectedSource?.kind}, uriValue=${selectedSource?.uriValue}")
-        if (selectedSource == null) return
-        val changed = manager.selectSubtitleSource(optionId)
-        android.util.Log.d("PlayerActivity", "applySubTrack: changed=$changed")
-        if (!changed) {
+    private fun handleSubtitleTrackSelection(optionId: String) {
+        val manager = subtitleManager ?: run {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+            return
+        }
+        val descriptor = manager.availableSubtitleSources().firstOrNull { source -> source.id == optionId } ?: run {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
+            return
+        }
+        if (!manager.selectSubtitleSource(optionId)) {
+            showMessage(R.string.player_track_selector_feedback_unavailable)
             return
         }
 
-        if (SubtitleManager.isOffSourceId(optionId)) {
+        if (descriptor.kind == SubtitleSourceKind.Off) {
             onSubtitleDisabled()
+        } else {
+            onSubtitleEnabled(getString(R.string.player_subtitle_feedback_loaded, descriptor.label))
+        }
+    }
+
+    private fun playSelectedSmbEntry(
+        credentialSet: NetworkCredentialSet,
+        entry: SharedLibraryEntry
+    ) {
+        val smbUriValue = buildAuthenticatedSmbUri(credentialSet, entry)
+        if (smbUriValue == null) {
+            showMessage(R.string.player_network_browser_error_invalid_entry)
             return
         }
 
-        onSubtitleEnabled(getString(R.string.player_subtitle_feedback_loaded, selectedSource.label))
+        val launchOutcome = PlaybackRequestParser.fromInput(
+            LaunchRequestInput(
+                sources = listOf(
+                    LaunchSourceCandidate(
+                        rawValue = smbUriValue,
+                        mimeType = null,
+                        isAccessible = true
+                    )
+                ),
+                startIndex = 0,
+                startPositionMs = 0L,
+                origin = LaunchOrigin.InternalExplicit,
+                rawAction = ACTION_OPEN_INTERNAL_SMB
+            )
+        )
+        when (launchOutcome) {
+            is LaunchOutcome.Rejected -> {
+                showMessage(launchOutcome.messageResId)
+            }
+
+            is LaunchOutcome.Ready -> {
+                lastSmbCredentialSet = credentialSet
+                pendingSnapshot = null
+                pendingLaunch = PendingLaunch(
+                    request = launchOutcome.request,
+                    messageResId = null
+                )
+                activeRequest = launchOutcome.request
+                beginPlaybackSession()
+                showMessage(
+                    getString(
+                        R.string.player_network_browser_feedback_playing,
+                        entry.displayName
+                    )
+                )
+            }
+
+            is LaunchOutcome.FallbackSelected -> {
+                lastSmbCredentialSet = credentialSet
+                pendingSnapshot = null
+                pendingLaunch = PendingLaunch(
+                    request = launchOutcome.request,
+                    messageResId = launchOutcome.messageResId
+                )
+                activeRequest = launchOutcome.request
+                beginPlaybackSession()
+            }
+        }
+    }
+
+    private fun buildAuthenticatedSmbUri(
+        credentialSet: NetworkCredentialSet,
+        entry: SharedLibraryEntry
+    ): String? {
+        if (entry.entryType != SharedLibraryEntryType.File || !entry.isPlayableCandidate) {
+            return null
+        }
+
+        val normalizedHost = credentialSet.host.trim()
+        val normalizedShareName = credentialSet.shareName.trim().trim('/').trim('\\')
+        val normalizedPath = entry.path.trim().trim('/').trim('\\').replace('\\', '/')
+        if (normalizedHost.isEmpty() || normalizedShareName.isEmpty() || normalizedPath.isEmpty()) {
+            return null
+        }
+
+        val principal = buildString {
+            credentialSet.domain
+                ?.trim()
+                ?.takeIf { value -> value.isNotEmpty() }
+                ?.let { domain ->
+                    append(domain)
+                    append(';')
+                }
+            append(credentialSet.username.trim())
+        }.takeIf { value -> value.isNotBlank() }
+        val userInfo = when {
+            principal == null -> null
+            credentialSet.password.isBlank() -> principal
+            else -> "$principal:${credentialSet.password}"
+        }
+
+        return runCatching {
+            URI(
+                "smb",
+                userInfo,
+                normalizedHost,
+                -1,
+                "/$normalizedShareName/$normalizedPath",
+                null,
+                null
+            ).toASCIIString()
+        }.getOrNull()
     }
 
     private fun autoDetectSubtitleForCurrentSource() {
+        if (subtitleDisabledByUser) {
+            return
+        }
         val manager = subtitleManager ?: return
         val currentSource = activeRequest
             ?.sources
             ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
             ?: return
-        val sourceUri = Uri.parse(currentSource.uriValue)
-        android.util.Log.d("PlayerActivity", "autoDetectSub: uriValue=${currentSource.uriValue}, parsedUri=$sourceUri")
-        val detectionResult = manager.autoDetectExternalSubtitle(sourceUri)
-        android.util.Log.d("PlayerActivity", "autoDetectSub: status=${detectionResult.status}, matched=${detectionResult.matchedFiles.size}")
-        
-        // List is updated inside autoDetectExternalSubtitle, so we continue even if disabled
-        // to ensure the UI model gets the detected sources.
-
-        if (subtitleDisabledByUser) {
-            return
-        }
+        val detectionResult = manager.autoDetectExternalSubtitle(Uri.parse(currentSource.uriValue))
         val subtitleFile = detectionResult.matchedFile ?: return
-        // Copy subtitle to cache dir so ExoPlayer can read it without scoped storage restrictions
-        val subtitleCacheDir = File(cacheDir, "subtitles")
-        subtitleCacheDir.mkdirs()
-        val cachedFile = File(subtitleCacheDir, subtitleFile.name)
-        val subtitleUri = runCatching {
-            subtitleFile.inputStream().use { input ->
-                cachedFile.outputStream().use { output -> input.copyTo(output) }
-            }
-            Uri.fromFile(cachedFile)
-        }.getOrNull() ?: Uri.fromFile(subtitleFile)
         val loaded = manager.loadExternalSubtitle(
-            uri = subtitleUri,
+            uri = Uri.fromFile(subtitleFile),
             mimeType = detectionResult.matchedMimeType ?: manager.resolveSubtitleMimeTypeFromName(subtitleFile.name) ?: return,
             isAutoDetected = true
         )
@@ -962,7 +1061,8 @@ enum class MediaScheme {
     Http,
     Https,
     Content,
-    File;
+    File,
+    Smb;
 
     companion object {
         fun fromScheme(rawScheme: String?): MediaScheme? = when (rawScheme?.lowercase(Locale.ROOT)) {
@@ -970,6 +1070,7 @@ enum class MediaScheme {
             "https" -> Https
             "content" -> Content
             "file" -> File
+            "smb" -> Smb
             else -> null
         }
     }
@@ -1186,6 +1287,7 @@ object PlaybackRequestParser {
         return when (mediaScheme) {
             MediaScheme.Http, MediaScheme.Https -> true
             MediaScheme.File -> uri.path?.let { File(it).exists() } == true
+            MediaScheme.Smb -> true
             MediaScheme.Content -> {
                 if (resolver == null) {
                     true

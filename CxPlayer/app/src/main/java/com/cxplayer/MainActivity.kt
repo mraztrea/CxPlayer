@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FIX]: Sửa lỗi autoload phụ đề ngoài - thêm probe fallback khi scoped storage chặn listFiles - 2026-05-01",
+        text = "[FEATURE]: Nut va icon Track Selector ro nghia hon trong PlayerActivity - 2026-05-01 13:29",
         modifier = modifier
     )
 }
