@@ -85,6 +85,37 @@ class PlayerActivityPlaybackTest {
     }
 
     @Test
+    fun localLaunchOpensAndDismissesTrackSelectorWithoutBreakingPlayback() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                assertFalse(activity.isTrackSelectorShowingForTesting())
+                assertTrue(activity.openTrackSelectorForTesting())
+                assertTrue(activity.isTrackSelectorShowingForTesting())
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+
+            scenario.moveToState(Lifecycle.State.CREATED)
+
+            scenario.onActivity { activity ->
+                assertFalse(activity.isTrackSelectorShowingForTesting())
+            }
+        }
+    }
+
+    @Test
+    fun settingsButtonOpensTrackSelectorPopup() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                val settingsButton = activity.findViewById<ImageButton>(R.id.playerSettingsButton)
+
+                assertFalse(activity.isTrackSelectorShowingForTesting())
+                assertTrue(settingsButton.performClick())
+                assertTrue(activity.isTrackSelectorShowingForTesting())
+            }
+        }
+    }
+
+    @Test
     fun localLaunchAutoDetectsSiblingSubtitleAndManualAttachKeepsPlaybackActive() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val videoFile = File(context.cacheDir, "subtitle-smoke-${SystemClock.uptimeMillis()}.mp4").apply {

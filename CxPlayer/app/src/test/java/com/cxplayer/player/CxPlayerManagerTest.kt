@@ -200,6 +200,24 @@ class CxPlayerManagerTest {
         assertNull(manager.subtitleSessionController())
     }
 
+    @Test
+    fun `track selector session controller is available for active playback and cleared on release`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        assertNull(manager.trackSelectorSessionController())
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L))
+
+        assertNotNull(manager.activePlayer())
+        assertNotNull(manager.trackSelectorSessionController())
+
+        manager.release()
+
+        assertNull(manager.activePlayer())
+        assertNull(manager.trackSelectorSessionController())
+    }
+
     private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {
         return PlaybackRequest(
             sources = listOf(

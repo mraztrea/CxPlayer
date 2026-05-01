@@ -155,6 +155,10 @@ class CxPlayerManager internal constructor(
         return activePlayer()?.let(::PlayerSubtitleSessionController)
     }
 
+    internal fun trackSelectorSessionController(): TrackSelectorSessionController? {
+        return activePlayer()?.let(::PlayerTrackSelectorSessionController)
+    }
+
     private fun ensureSession(): PlayerSession {
         return session ?: sessionFactory.create().also { createdSession ->
             session = createdSession

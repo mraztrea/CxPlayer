@@ -20,6 +20,12 @@
     <string name="player_subtitle_feedback_style">Phụ đề: Kiểu %1$dsp</string>
     <string name="player_subtitle_feedback_missing">Phụ đề: Không tìm thấy tệp phù hợp</string>
     <string name="player_subtitle_feedback_unsupported">Phụ đề: Nguồn hiện tại không hỗ trợ tự dò</string>
+    <string name="player_track_selector_audio_title">Audio Tracks</string>
+    <string name="player_track_selector_subtitle_title">Subtitles</string>
+    <string name="player_track_selector_audio_empty">Không có audio track khác khả dụng.</string>
+    <string name="player_track_selector_subtitle_empty">Không có phụ đề khả dụng.</string>
+    <string name="player_track_selector_feedback_audio">Audio: %1$s</string>
+    <string name="player_track_selector_feedback_selector_unavailable">Track selector chưa sẵn sàng.</string>
     <string name="player_time_placeholder">--:--</string>
     <string name="player_gesture_overlay_volume_label">Âm lượng</string>
     <string name="player_gesture_overlay_brightness_label">Độ sáng</string>

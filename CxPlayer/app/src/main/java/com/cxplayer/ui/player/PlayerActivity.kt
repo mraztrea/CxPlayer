@@ -23,10 +23,19 @@ import androidx.core.view.updatePadding
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
 import com.cxplayer.databinding.ActivityPlayerBinding
+import com.cxplayer.player.AudioTrackDescriptor
 import com.cxplayer.player.CxPlayerManager
 import com.cxplayer.player.PlaybackSnapshot
 import com.cxplayer.player.PlaybackStateSnapshot
+import com.cxplayer.player.SubtitleSourceDescriptor
 import com.cxplayer.player.SubtitleManager
+import com.cxplayer.player.TrackSelectorSessionController
+import com.cxplayer.ui.controls.TrackSelector
+import com.cxplayer.ui.controls.TrackSelectorOptionUiModel
+import com.cxplayer.ui.controls.TrackSelectorSection
+import com.cxplayer.ui.controls.TrackSelectorSectionUiModel
+import com.cxplayer.ui.controls.TrackSelectorSelection
+import com.cxplayer.ui.controls.TrackSelectorUiModel
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
@@ -65,6 +74,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var volumeButton: ImageButton
     private lateinit var settingsButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
+    private val trackSelector by lazy(LazyThreadSafetyMode.NONE) { TrackSelector(this) }
     private val subtitlePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         loadPickedSubtitle(uri)
@@ -138,6 +148,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         captureSnapshot()
+        trackSelector.dismiss()
         subtitleManager = null
         playerManager.release()
         syncPlayerState()
@@ -145,6 +156,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        trackSelector.dismiss()
         if (::gestureController.isInitialized) {
             gestureController.release()
         }
@@ -186,6 +198,14 @@ class PlayerActivity : AppCompatActivity() {
     internal fun currentPlaybackState(): PlaybackStateSnapshot = playerManager.currentState()
 
     internal fun hasSubtitleManager(): Boolean = subtitleManager != null
+
+    internal fun isTrackSelectorShowingForTesting(): Boolean = trackSelector.isShowing()
+
+    internal fun openTrackSelectorForTesting(): Boolean = showTrackSelector()
+
+    internal fun currentAvailableAudioTrackCount(): Int {
+        return playerManager.trackSelectorSessionController()?.currentAudioTracks()?.size ?: 0
+    }
 
     internal fun currentAvailableSubtitleSourceCount(): Int {
         return subtitleManager?.availableSubtitleSources()?.size ?: 0
@@ -272,6 +292,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun beginPlaybackSession() {
         val launch = pendingLaunch ?: return
+        trackSelector.dismiss()
         activeRequest = launch.request
         playerManager.attach(playerView)
         playerManager.load(
@@ -336,7 +357,7 @@ class PlayerActivity : AppCompatActivity() {
         backButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
-        overflowButton.setOnClickListener { cycleSubtitleSource() }
+        overflowButton.setOnClickListener { launchSubtitlePicker() }
     }
 
     private fun initializeBottomChrome() {
@@ -374,7 +395,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         seekForwardButton.setOnClickListener { seekForward() }
         volumeButton.setOnClickListener { }
-        settingsButton.setOnClickListener { launchSubtitlePicker() }
+        settingsButton.setOnClickListener { showTrackSelector() }
         settingsButton.setOnLongClickListener {
             val fontSize = advanceSubtitleStyleForTesting()
             if (fontSize > 0) {
@@ -403,7 +424,96 @@ class PlayerActivity : AppCompatActivity() {
         if (subtitleManager == null) {
             return
         }
+        trackSelector.dismiss()
         subtitlePickerLauncher.launch(arrayOf("text/*", "application/octet-stream", "application/x-subrip"))
+    }
+
+    private fun showTrackSelector(): Boolean {
+        val model = buildTrackSelectorModel() ?: run {
+            showMessage(R.string.player_track_selector_feedback_selector_unavailable)
+            return false
+        }
+        trackSelector.show(settingsButton, model, ::handleTrackSelection)
+        return true
+    }
+
+    private fun buildTrackSelectorModel(): TrackSelectorUiModel? {
+        val controller = playerManager.trackSelectorSessionController()
+        val audioTracks = controller?.currentAudioTracks().orEmpty()
+        if (controller == null && subtitleManager == null) {
+            return null
+        }
+
+        return TrackSelectorUiModel(
+            audioSection = TrackSelectorSectionUiModel(
+                title = getString(R.string.player_track_selector_audio_title),
+                emptyLabel = getString(R.string.player_track_selector_audio_empty),
+                options = audioTracks.map(::toAudioOptionUiModel)
+            ),
+            subtitleSection = TrackSelectorSectionUiModel(
+                title = getString(R.string.player_track_selector_subtitle_title),
+                emptyLabel = getString(R.string.player_track_selector_subtitle_empty),
+                options = subtitleManager
+                    ?.availableSubtitleSources()
+                    .orEmpty()
+                    .map(::toSubtitleOptionUiModel)
+            )
+        )
+    }
+
+    private fun toAudioOptionUiModel(track: AudioTrackDescriptor): TrackSelectorOptionUiModel {
+        return TrackSelectorOptionUiModel(
+            id = track.id,
+            label = track.label,
+            isSelected = track.isSelected,
+            isEnabled = track.isSelectable
+        )
+    }
+
+    private fun toSubtitleOptionUiModel(source: SubtitleSourceDescriptor): TrackSelectorOptionUiModel {
+        return TrackSelectorOptionUiModel(
+            id = source.id,
+            label = source.label,
+            isSelected = source.isCurrentlySelected,
+            isEnabled = true
+        )
+    }
+
+    private fun handleTrackSelection(selection: TrackSelectorSelection) {
+        when (selection.section) {
+            TrackSelectorSection.Audio -> applySelectedAudioTrack(selection.optionId)
+            TrackSelectorSection.Subtitle -> applySelectedSubtitleTrack(selection.optionId)
+        }
+    }
+
+    private fun applySelectedAudioTrack(optionId: String) {
+        val controller = playerManager.trackSelectorSessionController() ?: return
+        val selectedTrack = controller.currentAudioTracks().firstOrNull { it.id == optionId } ?: return
+        val changed = controller.selectAudioTrack(
+            groupIndex = selectedTrack.groupIndex,
+            trackIndex = selectedTrack.trackIndex
+        )
+        if (!changed) {
+            return
+        }
+        showMessage(getString(R.string.player_track_selector_feedback_audio, selectedTrack.label))
+        syncPlayerState()
+    }
+
+    private fun applySelectedSubtitleTrack(optionId: String) {
+        val manager = subtitleManager ?: return
+        val selectedSource = manager.availableSubtitleSources().firstOrNull { it.id == optionId } ?: return
+        val changed = manager.selectSubtitleSource(optionId)
+        if (!changed) {
+            return
+        }
+
+        if (SubtitleManager.isOffSourceId(optionId)) {
+            onSubtitleDisabled()
+            return
+        }
+
+        onSubtitleEnabled(getString(R.string.player_subtitle_feedback_loaded, selectedSource.label))
     }
 
     private fun autoDetectSubtitleForCurrentSource() {

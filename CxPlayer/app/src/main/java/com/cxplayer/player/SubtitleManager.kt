@@ -453,6 +453,8 @@ internal class SubtitleManager(
             SubtitleStyleState(fontSizeSp = 22, isBold = true, foregroundColor = Color.WHITE, edgeMode = SubtitleEdgeMode.DropShadow)
         )
 
+        internal fun isOffSourceId(sourceId: String): Boolean = sourceId == OFF_SUBTITLE_SOURCE_ID
+
         internal fun supportedSubtitleExtensions(): List<String> = listOf(".srt", ".ass", ".ssa", ".vtt")
 
         internal fun externalSourceId(uri: Uri): String = "external:${uri}"
