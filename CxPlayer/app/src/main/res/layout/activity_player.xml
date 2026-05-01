@@ -90,6 +90,16 @@
                 android:textSize="16sp" />
 
             <ImageButton
+                android:id="@+id/playerAiSubtitleButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_ai_subtitle_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                android:src="@android:drawable/ic_btn_speak_now"
+                android:alpha="0.7" />
+
+            <ImageButton
                 android:id="@+id/playerOverflowButton"
                 android:layout_width="@dimen/player_transport_button_size"
                 android:layout_height="@dimen/player_transport_button_size"
@@ -98,6 +108,63 @@
                 android:padding="@dimen/player_transport_button_padding"
                 app:srcCompat="@drawable/ic_player_overflow" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- AI Subtitle Overlay -->
+    <LinearLayout
+        android:id="@+id/aiSubtitleOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="120dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/aiSubtitleOriginalText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#99000000"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="4dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:maxLines="3"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/aiSubtitleTranslationText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="#99000000"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="4dp"
+            android:textColor="#FFD700"
+            android:textSize="14sp"
+            android:maxLines="3"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/aiSubtitleStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="#66000000"
+            android:paddingStart="8dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="2dp"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <LinearLayout

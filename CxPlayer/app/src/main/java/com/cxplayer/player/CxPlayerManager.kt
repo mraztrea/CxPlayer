@@ -235,6 +235,10 @@ class CxPlayerManager internal constructor(
         return activePlayer()?.let(::PlayerTrackSelectorSessionController)
     }
 
+    internal fun renderersFactory(): Any? {
+        return sessionFactory.renderersFactory()
+    }
+
     private fun ensureSession(): PlayerSession {
         return session ?: sessionFactory.create().also { createdSession ->
             session = createdSession
@@ -335,6 +339,7 @@ enum class PlaybackSessionState {
 
 internal interface PlayerSessionFactory {
     fun create(): PlayerSession
+    fun renderersFactory(): Any? = null
 }
 
 internal interface PlayerSession {
@@ -369,9 +374,12 @@ internal interface PlayerSession {
 private class ExoPlayerSessionFactory(
     private val context: Context
 ) : PlayerSessionFactory {
+    private var lastRenderersFactory: CxRenderersFactory? = null
+
     override fun create(): PlayerSession {
         val configuration = playerSessionConfigurationSnapshot()
         val renderersFactory = CxRenderersFactory(context)
+        lastRenderersFactory = renderersFactory
         val mediaSourceFactory = CxMediaSourceFactory(context).create()
         val exoPlayer = ExoPlayer.Builder(context)
             .setRenderersFactory(renderersFactory)
@@ -383,6 +391,8 @@ private class ExoPlayerSessionFactory(
             .build()
         return ExoPlayerSession(exoPlayer)
     }
+
+    override fun renderersFactory(): Any? = lastRenderersFactory
 }
 
 private class ExoPlayerSession(

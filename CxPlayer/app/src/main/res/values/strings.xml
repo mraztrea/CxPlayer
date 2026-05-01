@@ -61,4 +61,27 @@
     <string name="player_repeat_all_feedback">Lặp lại: Tất cả</string>
     <string name="player_repeat_one_feedback">Lặp lại: Một video</string>
     <string name="player_playlist_position">Video %1$d / %2$d</string>
+
+    <!-- AI Subtitle -->
+    <string name="player_ai_subtitle_content_description">Phụ đề AI</string>
+    <string name="player_ai_subtitle_on">🤖 AI Subtitle: Bật</string>
+    <string name="player_ai_subtitle_off">🤖 AI Subtitle: Tắt</string>
+    <string name="player_ai_subtitle_connecting">Đang kết nối…</string>
+    <string name="player_ai_subtitle_reconnecting">Đang kết nối lại…</string>
+    <string name="player_ai_subtitle_failed">Kết nối thất bại. Vui lòng thử lại.</string>
+    <string name="player_ai_subtitle_api_key_title">Nhập API Key Soniox</string>
+    <string name="player_ai_subtitle_api_key_hint">API Key</string>
+    <string name="player_ai_subtitle_api_key_required">Vui lòng nhập API key Soniox để sử dụng AI subtitle.</string>
+    <string name="player_ai_subtitle_export_title">Xuất file SRT?</string>
+    <string name="player_ai_subtitle_export_message">Bạn muốn lưu phụ đề AI thành file SRT không?</string>
+    <string name="player_ai_subtitle_export_yes">Lưu</string>
+    <string name="player_ai_subtitle_export_no">Bỏ qua</string>
+    <string name="player_ai_subtitle_export_success">Đã lưu file SRT: %1$s</string>
+    <string name="player_ai_subtitle_display_mode_title">Chế độ hiển thị phụ đề</string>
+    <string name="player_ai_subtitle_mode_original">Chỉ phụ đề gốc</string>
+    <string name="player_ai_subtitle_mode_translation">Chỉ bản dịch</string>
+    <string name="player_ai_subtitle_mode_both">Cả hai</string>
+    <string name="player_ai_subtitle_cache_found">Đã tìm thấy phụ đề đã lưu. Sử dụng cache?</string>
+    <string name="player_ai_subtitle_cache_use">Dùng cache</string>
+    <string name="player_ai_subtitle_cache_new">Tạo mới</string>
 </resources>
