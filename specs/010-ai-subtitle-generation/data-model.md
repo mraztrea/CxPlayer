@@ -20,6 +20,21 @@ Sự kiện phụ đề đơn lẻ được emit từ Soniox STT.
 
 ---
 
+### SubtitleDisplayMode
+
+Chế độ hiển thị phụ đề do người dùng chọn.
+
+| Value | Description |
+|-------|-------------|
+| ORIGINAL_ONLY | Chỉ hiển thị phụ đề ngôn ngữ gốc |
+| TRANSLATION_ONLY | Chỉ hiển thị bản dịch |
+| BOTH | Hiển thị cả phụ đề gốc và bản dịch song song |
+
+**Default**: BOTH
+**Lifecycle**: Lưu theo preference người dùng, áp dụng ngay khi thay đổi.
+
+---
+
 ### SrtEntry
 
 Một mục phụ đề trong file SRT, đã finalized.

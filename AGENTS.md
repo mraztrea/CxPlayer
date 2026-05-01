@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/009-network-polish/plan.md`
+`specs/010-ai-subtitle-generation/plan.md`
 <!-- SPECKIT END -->
 
 ## 🚨 CRITICAL RULE: Reference Code 🚨

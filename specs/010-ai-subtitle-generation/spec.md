@@ -26,16 +26,18 @@ Người dùng đang xem một video có tiếng nói (phim, bài giảng, podca
 
 ### User Story 2 - Dịch phụ đề sang ngôn ngữ khác (Priority: P2)
 
-Người dùng xem video tiếng nước ngoài (tiếng Anh, Nhật, Hàn...) và muốn xem bản dịch tiếng Việt song song với phụ đề gốc. Khi bật AI subtitle, hệ thống tự động nhận dạng ngôn ngữ nguồn và hiển thị cả phụ đề gốc lẫn bản dịch.
+Người dùng xem video tiếng nước ngoài (tiếng Anh, Nhật, Hàn...) và muốn xem bản dịch tiếng Việt. Khi bật AI subtitle, hệ thống tự động nhận dạng ngôn ngữ nguồn và hiển thị phụ đề. Người dùng có thể chọn chế độ hiển thị: chỉ phụ đề gốc, chỉ bản dịch, hoặc cả hai song song.
 
 **Why this priority**: Dịch thuật là giá trị gia tăng quan trọng nhất sau nhận dạng giọng nói, đặc biệt hữu ích cho người dùng Việt xem nội dung nước ngoài.
 
-**Independent Test**: Mở video tiếng Anh, bật AI subtitle và xác nhận có 2 dòng phụ đề — dòng gốc và dòng dịch tiếng Việt.
+**Independent Test**: Mở video tiếng Anh, bật AI subtitle, chuyển đổi giữa 3 chế độ hiển thị và xác nhận phụ đề thay đổi tương ứng.
 
 **Acceptance Scenarios**:
 
-1. **Given** AI subtitle đang bật với video tiếng Anh, **When** dịch vụ nhận dạng hoàn tất một câu, **Then** hiển thị dòng phụ đề gốc (tiếng Anh) và dòng dịch (tiếng Việt) ngay bên dưới.
-2. **Given** AI subtitle đang bật, **When** video có nhiều ngôn ngữ xen kẽ, **Then** hệ thống tự động nhận dạng ngôn ngữ đang nói và dịch tương ứng.
+1. **Given** AI subtitle đang bật với video tiếng Anh ở chế độ "Cả hai", **When** dịch vụ nhận dạng hoàn tất một câu, **Then** hiển thị dòng phụ đề gốc (tiếng Anh) và dòng dịch (tiếng Việt) ngay bên dưới.
+2. **Given** AI subtitle đang bật, **When** người dùng chuyển chế độ sang "Chỉ bản dịch", **Then** chỉ hiển thị dòng dịch tiếng Việt, ẩn phụ đề gốc.
+3. **Given** AI subtitle đang bật, **When** người dùng chuyển chế độ sang "Chỉ phụ đề gốc", **Then** chỉ hiển thị phụ đề ngôn ngữ gốc, ẩn bản dịch.
+4. **Given** AI subtitle đang bật, **When** video có nhiều ngôn ngữ xen kẽ, **Then** hệ thống tự động nhận dạng ngôn ngữ đang nói và dịch tương ứng.
 
 ---
 
@@ -98,6 +100,7 @@ Người dùng xem lại video đã từng bật AI subtitle trước đó. Thay
 - **FR-013**: Hệ thống PHẢI xử lý lỗi kết nối (mất mạng, API key sai, rate limit) với thông báo rõ ràng cho người dùng.
 - **FR-014**: Hệ thống PHẢI tự động kết nối lại khi mất kết nối (tối đa 3 lần, delay tăng dần).
 - **FR-015**: Hệ thống PHẢI truyền context từ phiên trước (500 ký tự dịch gần nhất) sang phiên mới để cải thiện chất lượng nhận dạng.
+- **FR-016**: Hệ thống PHẢI cho phép người dùng chọn chế độ hiển thị phụ đề: chỉ phụ đề gốc, chỉ bản dịch, hoặc cả hai song song. Tùy chọn này có thể thay đổi trong khi AI subtitle đang hoạt động.
 
 ### Key Entities
 

@@ -49,14 +49,18 @@ Orchestrator điều phối toàn bộ luồng AI subtitle.
 ```kotlin
 // Input: Video playback state + user toggle
 // Output: Subtitle events cho overlay rendering
+enum class SubtitleDisplayMode { ORIGINAL_ONLY, TRANSLATION_ONLY, BOTH }
+
 interface AiSubtitleManagerContract {
     val isActive: StateFlow<Boolean>
     val subtitleEvents: SharedFlow<SubtitleEvent>
     val connectionState: StateFlow<ConnectionState>
+    val displayMode: StateFlow<SubtitleDisplayMode>
     
     fun start(config: SonioxConfig)
     fun stop(): List<SrtEntry>  // Returns collected entries for SRT export
     fun onAudioData(pcmData: ByteArray)
+    fun setDisplayMode(mode: SubtitleDisplayMode)
 }
 ```
 
