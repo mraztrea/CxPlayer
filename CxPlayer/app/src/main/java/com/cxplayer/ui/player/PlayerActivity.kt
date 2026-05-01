@@ -517,15 +517,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun autoDetectSubtitleForCurrentSource() {
-        if (subtitleDisabledByUser) {
-            return
-        }
         val manager = subtitleManager ?: return
         val currentSource = activeRequest
             ?.sources
             ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
             ?: return
         val detectionResult = manager.autoDetectExternalSubtitle(Uri.parse(currentSource.uriValue))
+        if (subtitleDisabledByUser) {
+            return
+        }
         val subtitleFile = detectionResult.matchedFile ?: return
         val loaded = manager.loadExternalSubtitle(
             uri = Uri.fromFile(subtitleFile),

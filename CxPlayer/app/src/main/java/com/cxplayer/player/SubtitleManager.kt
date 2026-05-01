@@ -1,9 +1,13 @@
 package com.cxplayer.player
 
 import android.content.ContentResolver
+import android.database.Cursor
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Environment
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.util.TypedValue
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -65,12 +69,22 @@ internal data class SubtitleSourceDescriptor(
     val isCurrentlySelected: Boolean
 )
 
+internal data class DetectedSubtitleFile(
+    val file: File,
+    val mimeType: String?
+)
+
 internal data class SubtitleDetectionResult(
     val status: SubtitleDetectionStatus,
-    val matchedFile: File?,
-    val matchedMimeType: String?,
+    val matchedFiles: List<DetectedSubtitleFile>,
     val attemptedExtensions: List<String>
-)
+) {
+    val matchedFile: File?
+        get() = matchedFiles.firstOrNull()?.file
+
+    val matchedMimeType: String?
+        get() = matchedFiles.firstOrNull()?.mimeType
+}
 
 internal data class SubtitleSelectionState(
     val activeSourceId: String = OFF_SUBTITLE_SOURCE_ID,
@@ -182,7 +196,7 @@ internal class SubtitleManager(
 ) {
     private var styleState = SubtitleStyleState()
     private var selectionState = SubtitleSelectionState()
-    private var externalSubtitleSource: SubtitleSourceDescriptor? = null
+    private var externalSubtitleSources: List<SubtitleSourceDescriptor> = emptyList()
     private var stylePresetIndex: Int = 0
 
     fun currentStyleState(): SubtitleStyleState = styleState
@@ -217,9 +231,13 @@ internal class SubtitleManager(
                 isCurrentlySelected = selectionState.textTrackDisabled
             )
         )
-        externalSubtitleSource
-            ?.copy(isCurrentlySelected = selectionState.activeSourceId == externalSubtitleSource?.id && !selectionState.textTrackDisabled)
-            ?.let(sources::add)
+        sources.addAll(
+            externalSubtitleSources.map { source ->
+                source.copy(
+                    isCurrentlySelected = selectionState.activeSourceId == source.id && !selectionState.textTrackDisabled
+                )
+            }
+        )
         sources.addAll(embeddedSources)
         return sources
     }
@@ -227,49 +245,84 @@ internal class SubtitleManager(
     fun autoDetectExternalSubtitle(videoUri: Uri): SubtitleDetectionResult {
         return detectExternalSubtitle(
             videoPath = videoUri.path,
-            scheme = videoUri.scheme
-        )
+            scheme = videoUri.scheme,
+            resolvedLocalPath = resolveVideoPathForDetection(videoUri)
+        ).also { result ->
+            syncDetectedExternalSubtitleSources(result.matchedFiles)
+        }
     }
 
-    internal fun detectExternalSubtitle(videoPath: String?, scheme: String?): SubtitleDetectionResult {
+    internal fun detectExternalSubtitle(
+        videoPath: String?,
+        scheme: String?,
+        resolvedLocalPath: String? = null
+    ): SubtitleDetectionResult {
         val attemptedExtensions = supportedSubtitleExtensions()
         val normalizedScheme = scheme?.lowercase(Locale.ROOT)
-        if (normalizedScheme != null && normalizedScheme != "file") {
+        if (normalizedScheme != null && normalizedScheme != "file" && resolvedLocalPath.isNullOrBlank()) {
             return SubtitleDetectionResult(
                 status = SubtitleDetectionStatus.UnsupportedSource,
-                matchedFile = null,
-                matchedMimeType = null,
+                matchedFiles = emptyList(),
                 attemptedExtensions = attemptedExtensions
             )
         }
 
-        val resolvedVideoPath = videoPath
+        val resolvedVideoPath = resolvedLocalPath
             ?.takeIf { it.isNotBlank() }
+            ?: videoPath?.takeIf { it.isNotBlank() }
             ?: return SubtitleDetectionResult(
                 status = SubtitleDetectionStatus.UnsupportedSource,
-                matchedFile = null,
-                matchedMimeType = null,
+                matchedFiles = emptyList(),
                 attemptedExtensions = attemptedExtensions
             )
 
         val videoFile = File(resolvedVideoPath)
-        val baseName = videoFile.absolutePath.substringBeforeLast('.', missingDelimiterValue = videoFile.absolutePath)
-        attemptedExtensions.forEach { extension ->
-            val subtitleFile = File(baseName + extension)
-            if (subtitleFile.exists() && subtitleFile.isFile) {
-                return SubtitleDetectionResult(
-                    status = SubtitleDetectionStatus.Found,
-                    matchedFile = subtitleFile,
-                    matchedMimeType = resolveSubtitleMimeTypeFromName(subtitleFile.name),
-                    attemptedExtensions = attemptedExtensions
+        val parentDirectory = videoFile.parentFile
+            ?: return SubtitleDetectionResult(
+                status = SubtitleDetectionStatus.NotFound,
+                matchedFiles = emptyList(),
+                attemptedExtensions = attemptedExtensions
+            )
+        val siblingFiles = parentDirectory.listFiles()
+            ?: return SubtitleDetectionResult(
+                status = SubtitleDetectionStatus.Unreadable,
+                matchedFiles = emptyList(),
+                attemptedExtensions = attemptedExtensions
+            )
+
+        val videoBaseName = videoFile.nameWithoutExtension
+        val matchedFiles = siblingFiles
+            .asSequence()
+            .filter { it.isFile }
+            .mapNotNull { candidateFile ->
+                val mimeType = resolveSubtitleMimeTypeFromName(candidateFile.name) ?: return@mapNotNull null
+                if (!matchesSubtitleFilePattern(videoBaseName, candidateFile.name)) {
+                    return@mapNotNull null
+                }
+                DetectedSubtitleFile(
+                    file = candidateFile,
+                    mimeType = mimeType
                 )
             }
+            .sortedWith(
+                compareBy<DetectedSubtitleFile>(
+                    { !isExactSubtitleFileMatch(videoBaseName, it.file.name) },
+                    { it.file.name.lowercase(Locale.ROOT) }
+                )
+            )
+            .toList()
+
+        if (matchedFiles.isNotEmpty()) {
+            return SubtitleDetectionResult(
+                status = SubtitleDetectionStatus.Found,
+                matchedFiles = matchedFiles,
+                attemptedExtensions = attemptedExtensions
+            )
         }
 
         return SubtitleDetectionResult(
             status = SubtitleDetectionStatus.NotFound,
-            matchedFile = null,
-            matchedMimeType = null,
+            matchedFiles = emptyList(),
             attemptedExtensions = attemptedExtensions
         )
     }
@@ -315,15 +368,17 @@ internal class SubtitleManager(
             preservedPositionMs = sessionController.currentPositionMs,
             preservedPlayWhenReady = sessionController.playWhenReady
         )
-        externalSubtitleSource = SubtitleSourceDescriptor(
-            id = sourceId,
-            kind = SubtitleSourceKind.External,
-            label = label,
-            languageTag = DEFAULT_SUBTITLE_LANGUAGE,
-            mimeType = mimeType,
-            uriValue = uriValue,
-            isAutoDetected = isAutoDetected,
-            isCurrentlySelected = true
+        externalSubtitleSources = upsertExternalSubtitleSource(
+            SubtitleSourceDescriptor(
+                id = sourceId,
+                kind = SubtitleSourceKind.External,
+                label = label,
+                languageTag = DEFAULT_SUBTITLE_LANGUAGE,
+                mimeType = mimeType,
+                uriValue = uriValue,
+                isAutoDetected = isAutoDetected,
+                isCurrentlySelected = true
+            )
         )
         return selectionState
     }
@@ -334,17 +389,10 @@ internal class SubtitleManager(
             return true
         }
 
-        externalSubtitleSource
-            ?.takeIf { it.id == sourceId }
+        externalSubtitleSources
+            .firstOrNull { it.id == sourceId }
             ?.let { source ->
-                selectionState = selectionState.copy(
-                    activeSourceId = source.id,
-                    textTrackDisabled = false,
-                    preservedPositionMs = sessionController.currentPositionMs,
-                    preservedPlayWhenReady = sessionController.playWhenReady
-                )
-                sessionController.enableTextTracks()
-                return true
+                return selectExternalSubtitleSource(source)
             }
 
         sessionController.currentEmbeddedSubtitleTracks().forEach { track ->
@@ -421,6 +469,147 @@ internal class SubtitleManager(
         )
     }
 
+    internal fun syncDetectedExternalSubtitleSources(matchedFiles: List<DetectedSubtitleFile>) {
+        val detectedSources = matchedFiles.map { detectedFile ->
+            val uriValue = detectedFile.file.toURI().toString()
+            SubtitleSourceDescriptor(
+                id = externalSourceId(uriValue),
+                kind = SubtitleSourceKind.External,
+                label = detectedFile.file.name,
+                languageTag = resolveLanguageTagFromSubtitleFileName(detectedFile.file.name),
+                mimeType = detectedFile.mimeType,
+                uriValue = uriValue,
+                isAutoDetected = true,
+                isCurrentlySelected = selectionState.activeSourceId == externalSourceId(uriValue) && !selectionState.textTrackDisabled
+            )
+        }
+        val manualSources = externalSubtitleSources.filterNot { it.isAutoDetected }
+        externalSubtitleSources = detectedSources + manualSources.filterNot { manualSource ->
+            detectedSources.any { detectedSource -> detectedSource.id == manualSource.id }
+        }
+    }
+
+    private fun selectExternalSubtitleSource(source: SubtitleSourceDescriptor): Boolean {
+        if (selectionState.activeSourceId == source.id && !selectionState.textTrackDisabled) {
+            selectionState = selectionState.copy(
+                activeSourceId = source.id,
+                textTrackDisabled = false,
+                preservedPositionMs = sessionController.currentPositionMs,
+                preservedPlayWhenReady = sessionController.playWhenReady
+            )
+            sessionController.enableTextTracks()
+            return true
+        }
+
+        val sourceUri = source.uriValue?.let(Uri::parse) ?: return false
+        val mimeType = source.mimeType ?: resolveSubtitleMimeTypeFromName(source.label) ?: MimeTypes.APPLICATION_SUBRIP
+        return loadExternalSubtitle(
+            uri = sourceUri,
+            mimeType = mimeType,
+            isAutoDetected = source.isAutoDetected
+        )
+    }
+
+    private fun upsertExternalSubtitleSource(source: SubtitleSourceDescriptor): List<SubtitleSourceDescriptor> {
+        val existingIndex = externalSubtitleSources.indexOfFirst { it.id == source.id }
+        if (existingIndex < 0) {
+            return externalSubtitleSources + source
+        }
+
+        return externalSubtitleSources.toMutableList().apply {
+            set(existingIndex, source)
+        }
+    }
+
+    private fun resolveLanguageTagFromSubtitleFileName(fileName: String): String? {
+        val fileNameWithoutExtension = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+        return fileNameWithoutExtension.substringAfterLast('.', missingDelimiterValue = "")
+            .takeIf { it.isNotBlank() }
+            ?.takeIf { it.length in 2..8 }
+            ?.lowercase(Locale.ROOT)
+    }
+
+    private fun resolveVideoPathForDetection(videoUri: Uri): String? {
+        val normalizedScheme = videoUri.scheme?.lowercase(Locale.ROOT)
+        return when (normalizedScheme) {
+            null, "file" -> videoUri.path?.takeIf(::pathExists)
+            "content" -> resolveContentVideoPath(videoUri)
+            else -> null
+        }
+    }
+
+    private fun resolveContentVideoPath(videoUri: Uri): String? {
+        resolvePathFromDocumentId(videoUri)
+            ?.takeIf(::pathExists)
+            ?.let { return it }
+
+        val resolver = contentResolver ?: return null
+        val projection = arrayOf("_data", MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME)
+        val cursor = runCatching {
+            resolver.query(videoUri, projection, null, null, null)
+        }.getOrNull() ?: return null
+
+        cursor.use { contentCursor ->
+            if (!contentCursor.moveToFirst()) {
+                return null
+            }
+
+            readStringColumn(contentCursor, "_data")
+                ?.takeIf(::pathExists)
+                ?.let { return it }
+
+            val relativePath = readStringColumn(contentCursor, MediaStore.MediaColumns.RELATIVE_PATH)
+            val displayName = readStringColumn(contentCursor, MediaStore.MediaColumns.DISPLAY_NAME)
+            buildPrimaryExternalStoragePath(relativePath, displayName)
+                ?.takeIf(::pathExists)
+                ?.let { return it }
+        }
+
+        return null
+    }
+
+    private fun resolvePathFromDocumentId(videoUri: Uri): String? {
+        val documentId = runCatching {
+            DocumentsContract.getDocumentId(videoUri)
+        }.getOrNull() ?: return null
+
+        if (documentId.startsWith("raw:", ignoreCase = true)) {
+            return documentId.removePrefix("raw:")
+        }
+
+        val volumeName = documentId.substringBefore(':', missingDelimiterValue = "")
+        val relativePath = documentId.substringAfter(':', missingDelimiterValue = "")
+        if (volumeName.isBlank() || relativePath.isBlank()) {
+            return null
+        }
+
+        val storageRoot = if (volumeName.equals("primary", ignoreCase = true)) {
+            @Suppress("DEPRECATION")
+            Environment.getExternalStorageDirectory()
+        } else {
+            File("/storage/$volumeName")
+        }
+        return File(storageRoot, relativePath).absolutePath
+    }
+
+    private fun readStringColumn(cursor: Cursor, columnName: String): String? {
+        val columnIndex = cursor.getColumnIndex(columnName)
+        if (columnIndex < 0 || cursor.isNull(columnIndex)) {
+            return null
+        }
+        return cursor.getString(columnIndex)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun buildPrimaryExternalStoragePath(relativePath: String?, displayName: String?): String? {
+        val normalizedRelativePath = relativePath?.takeIf { it.isNotBlank() } ?: return null
+        val normalizedDisplayName = displayName?.takeIf { it.isNotBlank() } ?: return null
+        @Suppress("DEPRECATION")
+        val externalRoot = Environment.getExternalStorageDirectory()
+        return File(File(externalRoot, normalizedRelativePath), normalizedDisplayName).absolutePath
+    }
+
+    private fun pathExists(path: String): Boolean = File(path).exists()
+
     private fun applyStyleToView() {
         val subtitleView = playerView?.subtitleView ?: return
         val resolvedStyle = resolvedStyleState()
@@ -455,7 +644,28 @@ internal class SubtitleManager(
 
         internal fun isOffSourceId(sourceId: String): Boolean = sourceId == OFF_SUBTITLE_SOURCE_ID
 
+        internal fun matchesSubtitleFilePattern(videoBaseName: String, fileName: String): Boolean {
+            val candidateBaseName = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+            if (candidateBaseName.equals(videoBaseName, ignoreCase = true)) {
+                return true
+            }
+
+            if (!candidateBaseName.startsWith("$videoBaseName.", ignoreCase = true)) {
+                return false
+            }
+
+            val suffix = candidateBaseName.substring(videoBaseName.length + 1)
+            return suffix.isNotBlank() && !suffix.contains('.')
+        }
+
+        internal fun isExactSubtitleFileMatch(videoBaseName: String, fileName: String): Boolean {
+            return fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+                .equals(videoBaseName, ignoreCase = true)
+        }
+
         internal fun supportedSubtitleExtensions(): List<String> = listOf(".srt", ".ass", ".ssa", ".vtt")
+
+        internal fun externalSourceId(uriValue: String): String = "external:$uriValue"
 
         internal fun externalSourceId(uri: Uri): String = "external:${uri}"
 

@@ -62,6 +62,72 @@ class SubtitleManagerTest {
         assertNotNull(result.matchedFile)
         assertEquals("demo.srt", result.matchedFile?.name)
         assertEquals("application/x-subrip", result.matchedMimeType)
+        assertEquals(1, result.matchedFiles.size)
+    }
+
+    @Test
+    fun `content scheme detection falls back to resolved local file path`() {
+        val tempDirectory = createTempDirectory(prefix = "subtitle-manager-content").toFile()
+        val videoFile = File(tempDirectory, "wma.mp4").apply { writeBytes(byteArrayOf()) }
+        File(tempDirectory, "wma.srt").writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n")
+        val manager = SubtitleManager(FakeSubtitleSessionController())
+
+        val result = manager.detectExternalSubtitle(
+            videoPath = "/document/video/123",
+            scheme = "content",
+            resolvedLocalPath = videoFile.absolutePath
+        )
+
+        assertEquals(SubtitleDetectionStatus.Found, result.status)
+        assertEquals(listOf("wma.srt"), result.matchedFiles.map { it.file.name })
+    }
+
+    @Test
+    fun `auto detect matches exact and language tagged subtitle siblings with same base name`() {
+        val tempDirectory = createTempDirectory(prefix = "subtitle-manager-siblings").toFile()
+        val videoFile = File(tempDirectory, "ten-phim.mp4").apply { writeBytes(byteArrayOf()) }
+        File(tempDirectory, "ten-phim.ass").writeText("[Script Info]\nTitle: demo\n")
+        File(tempDirectory, "ten-phim.vi.srt").writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n")
+        File(tempDirectory, "ten-phim.en.vtt").writeText("WEBVTT\n\n00:00.000 --> 00:01.000\nHello\n")
+        File(tempDirectory, "ten-phim.vi.forced.srt").writeText("1\n00:00:00,000 --> 00:00:01,000\nSkip\n")
+        File(tempDirectory, "phim-khac.srt").writeText("1\n00:00:00,000 --> 00:00:01,000\nKhac\n")
+        val manager = SubtitleManager(FakeSubtitleSessionController())
+
+        val result = manager.detectExternalSubtitle(
+            videoPath = videoFile.absolutePath,
+            scheme = "file"
+        )
+
+        assertEquals(SubtitleDetectionStatus.Found, result.status)
+        assertEquals(
+            listOf("ten-phim.ass", "ten-phim.en.vtt", "ten-phim.vi.srt"),
+            result.matchedFiles.map { it.file.name }
+        )
+    }
+
+    @Test
+    fun `sync detected external subtitles exposes all sibling subtitle files in available sources`() {
+        val tempDirectory = createTempDirectory(prefix = "subtitle-manager-available").toFile()
+        val manager = SubtitleManager(FakeSubtitleSessionController())
+
+        manager.syncDetectedExternalSubtitleSources(
+            listOf(
+                DetectedSubtitleFile(
+                    file = File(tempDirectory, "ten-phim.ass").apply { writeText("[Script Info]\nTitle: demo\n") },
+                    mimeType = "text/x-ssa"
+                ),
+                DetectedSubtitleFile(
+                    file = File(tempDirectory, "ten-phim.vi.srt").apply { writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n") },
+                    mimeType = "application/x-subrip"
+                )
+            )
+        )
+
+        val sources = manager.availableSubtitleSources()
+
+        assertEquals(3, sources.size)
+        assertEquals(SubtitleSourceKind.Off, sources.first().kind)
+        assertEquals(listOf("ten-phim.ass", "ten-phim.vi.srt"), sources.drop(1).map { it.label })
     }
 
     @Test
