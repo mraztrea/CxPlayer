@@ -18,17 +18,27 @@ class CxAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
+        if (!inputBuffer.hasRemaining()) return
+
+        // Copy data ra trước để tránh "source buffer is this buffer" crash
+        val size = inputBuffer.remaining()
+        val data = ByteArray(size)
+        inputBuffer.get(data)
+
+        // Gửi PCM resample cho STT listener (nếu có)
         val listener = onPcmData
-        if (listener != null && inputBuffer.hasRemaining()) {
+        if (listener != null) {
             val inputFormat = inputAudioFormat
-            val pcm = resampleTo16kMono(inputBuffer.duplicate(), inputFormat)
+            val wrapped = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+            val pcm = resampleTo16kMono(wrapped, inputFormat)
             if (pcm.isNotEmpty()) {
                 listener(pcm)
             }
         }
-        // Pass through unchanged to speakers
-        val output = replaceOutputBuffer(inputBuffer.remaining())
-        output.put(inputBuffer)
+
+        // Pass through unchanged cho speakers
+        val output = replaceOutputBuffer(size)
+        output.put(data)
         output.flip()
     }
 
