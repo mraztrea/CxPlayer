@@ -8,16 +8,16 @@
 
 ## Checklist
 
-- [ ] 3.1 FFmpeg integration (media3-decoder-ffmpeg)
-- [ ] 3.2 CxRenderersFactory (prefer FFmpeg over MediaCodec)
-- [ ] 3.3 SubtitleManager: load external subtitle (SRT, ASS, VTT)
-- [ ] 3.4 SubtitleManager: auto-detect subtitle file next to video
-- [ ] 3.5 SubtitleManager: embedded subtitle track selection
-- [ ] 3.6 Subtitle styling (font size, bold, color, edge)
+- [x] 3.1 FFmpeg integration (media3-decoder-ffmpeg)
+- [x] 3.2 CxRenderersFactory (prefer FFmpeg over MediaCodec)
+- [x] 3.3 SubtitleManager: load external subtitle (SRT, ASS, VTT)
+- [x] 3.4 SubtitleManager: auto-detect subtitle file next to video
+- [x] 3.5 SubtitleManager: embedded subtitle track selection
+- [x] 3.6 Subtitle styling (font size, bold, color, edge)
 - [x] 3.7 Audio track selection
 - [x] 3.8 Track Selector UI (PopupWindow)
-- [ ] 3.9 Playlist / queue support (multiple videos)
-- [ ] 3.10 Shuffle mode + Next/Previous controls
+- [x] 3.9 Playlist / queue support (multiple videos)
+- [x] 3.10 Shuffle mode + Next/Previous controls
 
 ---
 

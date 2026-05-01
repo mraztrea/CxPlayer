@@ -51,4 +51,14 @@
     <string name="player_gesture_overlay_seek_backward_label">Tua lùi</string>
     <string name="player_gesture_overlay_fast_forward_label">Tua nhanh</string>
     <string name="player_gesture_overlay_fast_forward_value">2X</string>
+    <string name="player_skip_previous_content_description">Video trước</string>
+    <string name="player_skip_next_content_description">Video tiếp</string>
+    <string name="player_shuffle_content_description">Xáo trộn</string>
+    <string name="player_repeat_content_description">Lặp lại</string>
+    <string name="player_shuffle_on_feedback">Xáo trộn: Bật</string>
+    <string name="player_shuffle_off_feedback">Xáo trộn: Tắt</string>
+    <string name="player_repeat_off_feedback">Lặp lại: Tắt</string>
+    <string name="player_repeat_all_feedback">Lặp lại: Tất cả</string>
+    <string name="player_repeat_one_feedback">Lặp lại: Một video</string>
+    <string name="player_playlist_position">Video %1$d / %2$d</string>
 </resources>

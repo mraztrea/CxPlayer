@@ -1,6 +1,7 @@
 package com.cxplayer.player
 
 import android.content.Context
+import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
@@ -11,6 +12,7 @@ import com.cxplayer.ui.player.MediaScheme
 import com.cxplayer.ui.player.MediaSourceRef
 import com.cxplayer.ui.player.PlaybackRequest
 
+private const val TAG = "CxPlayerManager"
 private const val TRANSPORT_SEEK_INCREMENT_MS = 10_000L
 private const val DEFAULT_PLAYBACK_SPEED = 1f
 private const val MIN_PLAYBACK_SPEED = 0.25f
@@ -59,6 +61,8 @@ class CxPlayerManager internal constructor(
     private var attachedPlayerView: PlayerView? = null
     private var session: PlayerSession? = null
     private var playlistSize: Int = 0
+    private var shuffleEnabled: Boolean = false
+    private var currentRepeatMode: CxRepeatMode = CxRepeatMode.Off
     private var latestState = PlaybackStateSnapshot()
 
     constructor(context: Context) : this(ExoPlayerSessionFactory(context))
@@ -167,11 +171,57 @@ class CxPlayerManager internal constructor(
         setPlaybackSpeed(DEFAULT_PLAYBACK_SPEED)
     }
 
+    fun seekToNext() {
+        session?.let { currentSession ->
+            if (currentSession.hasNextMediaItem) {
+                currentSession.seekToNextMediaItem()
+                refreshState()
+                Log.d(TAG, "seekToNext: moved to index ${currentSession.currentMediaItemIndex}")
+            }
+        }
+    }
+
+    fun seekToPrevious() {
+        session?.let { currentSession ->
+            if (currentSession.hasPreviousMediaItem) {
+                currentSession.seekToPreviousMediaItem()
+                refreshState()
+                Log.d(TAG, "seekToPrevious: moved to index ${currentSession.currentMediaItemIndex}")
+            }
+        }
+    }
+
+    fun toggleShuffle(): Boolean {
+        shuffleEnabled = !shuffleEnabled
+        session?.shuffleModeEnabled = shuffleEnabled
+        refreshState()
+        Log.d(TAG, "toggleShuffle: $shuffleEnabled")
+        return shuffleEnabled
+    }
+
+    fun cycleRepeatMode(): CxRepeatMode {
+        currentRepeatMode = when (currentRepeatMode) {
+            CxRepeatMode.Off -> CxRepeatMode.All
+            CxRepeatMode.All -> CxRepeatMode.One
+            CxRepeatMode.One -> CxRepeatMode.Off
+        }
+        session?.repeatMode = currentRepeatMode.toPlayerRepeatMode()
+        refreshState()
+        Log.d(TAG, "cycleRepeatMode: $currentRepeatMode")
+        return currentRepeatMode
+    }
+
+    fun isShuffleEnabled(): Boolean = shuffleEnabled
+
+    fun currentRepeatMode(): CxRepeatMode = currentRepeatMode
+
     fun release() {
         detach()
         session?.release()
         session = null
         playlistSize = 0
+        shuffleEnabled = false
+        currentRepeatMode = CxRepeatMode.Off
         latestState = PlaybackStateSnapshot(sessionState = PlaybackSessionState.Released)
     }
 
@@ -210,7 +260,12 @@ class CxPlayerManager internal constructor(
             durationMs = normalizeDuration(currentSession.durationMs),
             playbackSpeed = currentSession.playbackSpeed,
             playWhenReady = currentSession.playWhenReady,
-            hasActiveSession = true
+            hasActiveSession = true,
+            playlistSize = playlistSize,
+            hasNextMediaItem = currentSession.hasNextMediaItem,
+            hasPreviousMediaItem = currentSession.hasPreviousMediaItem,
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = currentRepeatMode
         )
         return latestState
     }
@@ -259,7 +314,12 @@ data class PlaybackStateSnapshot(
     val durationMs: Long = 0L,
     val playbackSpeed: Float = DEFAULT_PLAYBACK_SPEED,
     val playWhenReady: Boolean = false,
-    val hasActiveSession: Boolean = false
+    val hasActiveSession: Boolean = false,
+    val playlistSize: Int = 0,
+    val hasNextMediaItem: Boolean = false,
+    val hasPreviousMediaItem: Boolean = false,
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: CxRepeatMode = CxRepeatMode.Off
 )
 
 enum class PlaybackSessionState {
@@ -281,11 +341,15 @@ internal interface PlayerSession {
     val player: Player?
     var playWhenReady: Boolean
     var playbackSpeed: Float
+    var shuffleModeEnabled: Boolean
+    var repeatMode: Int
     val currentPositionMs: Long
     val currentMediaItemIndex: Int
     val durationMs: Long
     val playbackState: Int
     val hasError: Boolean
+    val hasNextMediaItem: Boolean
+    val hasPreviousMediaItem: Boolean
 
     fun setWakeMode(wakeMode: Int)
 
@@ -294,6 +358,10 @@ internal interface PlayerSession {
     fun prepare()
 
     fun seekTo(mediaItemIndex: Int, positionMs: Long)
+
+    fun seekToNextMediaItem()
+
+    fun seekToPreviousMediaItem()
 
     fun release()
 }
@@ -335,6 +403,18 @@ private class ExoPlayerSession(
             exoPlayer.playbackParameters = PlaybackParameters(value)
         }
 
+    override var shuffleModeEnabled: Boolean
+        get() = exoPlayer.shuffleModeEnabled
+        set(value) {
+            exoPlayer.shuffleModeEnabled = value
+        }
+
+    override var repeatMode: Int
+        get() = exoPlayer.repeatMode
+        set(value) {
+            exoPlayer.repeatMode = value
+        }
+
     override val currentPositionMs: Long
         get() = exoPlayer.currentPosition.coerceAtLeast(0L)
 
@@ -349,6 +429,12 @@ private class ExoPlayerSession(
 
     override val hasError: Boolean
         get() = exoPlayer.playerError != null
+
+    override val hasNextMediaItem: Boolean
+        get() = exoPlayer.hasNextMediaItem()
+
+    override val hasPreviousMediaItem: Boolean
+        get() = exoPlayer.hasPreviousMediaItem()
 
     override fun setWakeMode(wakeMode: Int) {
         exoPlayer.setWakeMode(wakeMode)
@@ -367,7 +453,27 @@ private class ExoPlayerSession(
         exoPlayer.seekTo(mediaItemIndex, positionMs)
     }
 
+    override fun seekToNextMediaItem() {
+        exoPlayer.seekToNextMediaItem()
+    }
+
+    override fun seekToPreviousMediaItem() {
+        exoPlayer.seekToPreviousMediaItem()
+    }
+
     override fun release() {
         exoPlayer.release()
+    }
+}
+
+enum class CxRepeatMode {
+    Off,
+    All,
+    One;
+
+    fun toPlayerRepeatMode(): Int = when (this) {
+        Off -> Player.REPEAT_MODE_OFF
+        All -> Player.REPEAT_MODE_ALL
+        One -> Player.REPEAT_MODE_ONE
     }
 }

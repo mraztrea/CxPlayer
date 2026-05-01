@@ -277,6 +277,8 @@ private class FakePlayerSession : PlayerSession {
 
     override var playWhenReady: Boolean = false
     override var playbackSpeed: Float = 1f
+    override var shuffleModeEnabled: Boolean = false
+    override var repeatMode: Int = Player.REPEAT_MODE_OFF
     var currentPositionMsValue: Long = 0L
     var currentMediaItemIndexValue: Int = 0
     var durationMsValue: Long = 120_000L
@@ -299,6 +301,12 @@ private class FakePlayerSession : PlayerSession {
     override val durationMs: Long
         get() = durationMsValue
 
+    override val hasNextMediaItem: Boolean
+        get() = currentMediaItemIndexValue < lastSourceUris.size - 1
+
+    override val hasPreviousMediaItem: Boolean
+        get() = currentMediaItemIndexValue > 0
+
     override fun setWakeMode(wakeMode: Int) {
         lastWakeMode = wakeMode
     }
@@ -320,6 +328,20 @@ private class FakePlayerSession : PlayerSession {
     override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
         currentMediaItemIndexValue = mediaItemIndex
         currentPositionMsValue = positionMs.coerceAtMost(durationMsValue)
+    }
+
+    override fun seekToNextMediaItem() {
+        if (hasNextMediaItem) {
+            currentMediaItemIndexValue++
+            currentPositionMsValue = 0L
+        }
+    }
+
+    override fun seekToPreviousMediaItem() {
+        if (hasPreviousMediaItem) {
+            currentMediaItemIndexValue--
+            currentPositionMsValue = 0L
+        }
     }
 
     override fun release() {

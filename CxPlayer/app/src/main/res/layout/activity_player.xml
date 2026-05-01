@@ -165,9 +165,29 @@
             android:orientation="horizontal">
 
             <ImageButton
+                android:id="@+id/playerShuffleButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_shuffle_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_shuffle" />
+
+            <ImageButton
+                android:id="@+id/playerSkipPreviousButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_skip_previous_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_skip_previous" />
+
+            <ImageButton
                 android:id="@+id/playerSeekBackButton"
                 android:layout_width="@dimen/player_transport_button_size"
                 android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/player_seek_back_content_description"
                 android:padding="@dimen/player_transport_button_padding"
@@ -192,6 +212,26 @@
                 android:contentDescription="@string/player_seek_forward_content_description"
                 android:padding="@dimen/player_transport_button_padding"
                 app:srcCompat="@drawable/ic_player_seek_forward" />
+
+            <ImageButton
+                android:id="@+id/playerSkipNextButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_skip_next_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_skip_next" />
+
+            <ImageButton
+                android:id="@+id/playerRepeatButton"
+                android:layout_width="@dimen/player_transport_button_size"
+                android:layout_height="@dimen/player_transport_button_size"
+                android:layout_marginStart="@dimen/player_transport_button_spacing"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/player_repeat_content_description"
+                android:padding="@dimen/player_transport_button_padding"
+                app:srcCompat="@drawable/ic_player_repeat_off" />
 
             <ImageButton
                 android:id="@+id/playerTrackSelectorButton"

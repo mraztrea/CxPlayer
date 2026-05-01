@@ -28,6 +28,7 @@ import com.cxplayer.network.SharedLibraryEntry
 import com.cxplayer.network.SharedLibraryEntryType
 import com.cxplayer.player.AudioTrackDescriptor
 import com.cxplayer.player.CxPlayerManager
+import com.cxplayer.player.CxRepeatMode
 import com.cxplayer.player.PlaybackSnapshot
 import com.cxplayer.player.PlaybackStateSnapshot
 import com.cxplayer.player.SubtitleSourceDescriptor
@@ -76,6 +77,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var seekBackButton: ImageButton
     private lateinit var playPauseButton: ImageButton
     private lateinit var seekForwardButton: ImageButton
+    private lateinit var skipPreviousButton: ImageButton
+    private lateinit var skipNextButton: ImageButton
+    private lateinit var shuffleButton: ImageButton
+    private lateinit var repeatButton: ImageButton
     private lateinit var trackSelectorButton: ImageButton
     private lateinit var settingsButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
@@ -369,6 +374,10 @@ class PlayerActivity : AppCompatActivity() {
         seekBackButton = binding.playerSeekBackButton
         playPauseButton = binding.playerPlayPauseButton
         seekForwardButton = binding.playerSeekForwardButton
+        skipPreviousButton = binding.playerSkipPreviousButton
+        skipNextButton = binding.playerSkipNextButton
+        shuffleButton = binding.playerShuffleButton
+        repeatButton = binding.playerRepeatButton
         trackSelectorButton = binding.playerTrackSelectorButton
         settingsButton = binding.playerSettingsButton
     }
@@ -416,6 +425,35 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         seekForwardButton.setOnClickListener { seekForward() }
+        skipPreviousButton.setOnClickListener {
+            playerManager.seekToPrevious()
+            refreshSubtitleManager()
+            autoDetectSubtitleForCurrentSource()
+            syncPlayerState()
+            updateTopChrome()
+        }
+        skipNextButton.setOnClickListener {
+            playerManager.seekToNext()
+            refreshSubtitleManager()
+            autoDetectSubtitleForCurrentSource()
+            syncPlayerState()
+            updateTopChrome()
+        }
+        shuffleButton.setOnClickListener {
+            val enabled = playerManager.toggleShuffle()
+            showMessage(if (enabled) R.string.player_shuffle_on_feedback else R.string.player_shuffle_off_feedback)
+            syncPlayerState()
+        }
+        repeatButton.setOnClickListener {
+            val mode = playerManager.cycleRepeatMode()
+            val feedbackResId = when (mode) {
+                CxRepeatMode.Off -> R.string.player_repeat_off_feedback
+                CxRepeatMode.All -> R.string.player_repeat_all_feedback
+                CxRepeatMode.One -> R.string.player_repeat_one_feedback
+            }
+            showMessage(feedbackResId)
+            syncPlayerState()
+        }
         trackSelectorButton.setOnClickListener { showTrackSelector() }
         settingsButton.setOnClickListener { launchSubtitlePicker() }
         settingsButton.setOnLongClickListener {
@@ -758,6 +796,21 @@ class PlayerActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(binding.playerRoot)
     }
 
+    private fun updatePlaylistControls(state: PlaybackStateSnapshot) {
+        val isPlaylist = state.playlistSize > 1
+        skipPreviousButton.isEnabled = isPlaylist && state.hasPreviousMediaItem
+        skipPreviousButton.alpha = if (skipPreviousButton.isEnabled) 1f else 0.3f
+        skipNextButton.isEnabled = isPlaylist && state.hasNextMediaItem
+        skipNextButton.alpha = if (skipNextButton.isEnabled) 1f else 0.3f
+        shuffleButton.alpha = if (state.shuffleEnabled) 1f else 0.5f
+        val repeatIconRes = when (state.repeatMode) {
+            CxRepeatMode.Off -> R.drawable.ic_player_repeat_off
+            CxRepeatMode.All -> R.drawable.ic_player_repeat_all
+            CxRepeatMode.One -> R.drawable.ic_player_repeat_one
+        }
+        repeatButton.setImageResource(repeatIconRes)
+    }
+
     private fun updateBottomChrome() {
         val state = playerManager.currentState()
         currentTimeView.text = if (state.hasActiveSession) {
@@ -789,6 +842,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         playPauseButton.setImageResource(iconRes)
         playPauseButton.contentDescription = getString(descriptionRes)
+        updatePlaylistControls(state)
     }
 
     private fun updateTopChrome() {
