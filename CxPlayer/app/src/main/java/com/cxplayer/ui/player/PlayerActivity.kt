@@ -528,7 +528,10 @@ class PlayerActivity : AppCompatActivity() {
             ?.sources
             ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
             ?: return
-        val detectionResult = manager.autoDetectExternalSubtitle(Uri.parse(currentSource.uriValue))
+        val sourceUri = Uri.parse(currentSource.uriValue)
+        android.util.Log.d("PlayerActivity", "autoDetectSub: uriValue=${currentSource.uriValue}, parsedUri=$sourceUri")
+        val detectionResult = manager.autoDetectExternalSubtitle(sourceUri)
+        android.util.Log.d("PlayerActivity", "autoDetectSub: status=${detectionResult.status}, matched=${detectionResult.matchedFiles.size}")
         
         // List is updated inside autoDetectExternalSubtitle, so we continue even if disabled
         // to ensure the UI model gets the detected sources.

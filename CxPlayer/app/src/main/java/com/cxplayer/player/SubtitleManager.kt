@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Environment
+import android.provider.OpenableColumns
+import android.util.Log
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.TypedValue
@@ -243,13 +245,16 @@ internal class SubtitleManager(
     }
 
     fun autoDetectExternalSubtitle(videoUri: Uri): SubtitleDetectionResult {
-        return detectExternalSubtitle(
+        val resolvedPath = resolveVideoPathForDetection(videoUri)
+        Log.d(TAG, "autoDetect: uri=$videoUri, scheme=${videoUri.scheme}, path=${videoUri.path}, resolvedPath=$resolvedPath")
+        val result = detectExternalSubtitle(
             videoPath = videoUri.path,
             scheme = videoUri.scheme,
-            resolvedLocalPath = resolveVideoPathForDetection(videoUri)
-        ).also { result ->
-            syncDetectedExternalSubtitleSources(result.matchedFiles)
-        }
+            resolvedLocalPath = resolvedPath
+        )
+        Log.d(TAG, "autoDetect: status=${result.status}, matchedFiles=${result.matchedFiles.map { it.file.name }}")
+        syncDetectedExternalSubtitleSources(result.matchedFiles)
+        return result
     }
 
     internal fun detectExternalSubtitle(
@@ -532,7 +537,10 @@ internal class SubtitleManager(
 
     private fun resolveContentVideoPath(videoUri: Uri): String? {
         resolvePathFromDocumentId(videoUri)
-            ?.let { return it }
+            ?.let {
+                Log.d(TAG, "resolveContent: found via documentId: $it")
+                return it
+            }
 
         val resolver = contentResolver ?: return null
         val projection = arrayOf("_data", MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME)
@@ -546,14 +554,28 @@ internal class SubtitleManager(
             }
 
             readStringColumn(contentCursor, "_data")
-                ?.let { return it }
+                ?.let {
+                    Log.d(TAG, "resolveContent: found via _data: $it")
+                    return it
+                }
 
             val relativePath = readStringColumn(contentCursor, MediaStore.MediaColumns.RELATIVE_PATH)
             val displayName = readStringColumn(contentCursor, MediaStore.MediaColumns.DISPLAY_NAME)
+            Log.d(TAG, "resolveContent: relativePath=$relativePath, displayName=$displayName")
             buildPrimaryExternalStoragePath(relativePath, displayName)
-                ?.let { return it }
+                ?.let {
+                    Log.d(TAG, "resolveContent: found via relativePath+displayName: $it")
+                    return it
+                }
         }
 
+        // Fallback: resolve display name from OpenableColumns then search in MediaStore
+        resolvePathViaDisplayNameSearch(videoUri)?.let {
+            Log.d(TAG, "resolveContent: found via displayName search: $it")
+            return it
+        }
+
+        Log.d(TAG, "resolveContent: all resolve methods failed for $videoUri")
         return null
     }
 
@@ -595,6 +617,59 @@ internal class SubtitleManager(
         @Suppress("DEPRECATION")
         val externalRoot = Environment.getExternalStorageDirectory()
         return File(File(externalRoot, normalizedRelativePath), normalizedDisplayName).absolutePath
+    }
+
+    private fun resolvePathViaDisplayNameSearch(videoUri: Uri): String? {
+        val resolver = contentResolver ?: return null
+
+        // Step 1: Get display name from OpenableColumns
+        val displayName = runCatching {
+            resolver.query(videoUri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        }.getOrNull()?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                readStringColumn(cursor, OpenableColumns.DISPLAY_NAME)
+            } else null
+        } ?: return null
+
+        Log.d(TAG, "resolveViaDisplayName: displayName=$displayName")
+
+        // Step 2: Search MediaStore.Files for this exact filename
+        val projection = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.RELATIVE_PATH)
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
+        val selectionArgs = arrayOf(displayName)
+
+        runCatching {
+            resolver.query(
+                MediaStore.Files.getContentUri("external"),
+                projection, selection, selectionArgs, null
+            )
+        }.getOrNull()?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                readStringColumn(cursor, MediaStore.MediaColumns.DATA)
+                    ?.let { return it }
+
+                val relativePath = readStringColumn(cursor, MediaStore.MediaColumns.RELATIVE_PATH)
+                buildPrimaryExternalStoragePath(relativePath, displayName)
+                    ?.let { return it }
+            }
+        }
+
+        // Step 3: Try common storage directories
+        @Suppress("DEPRECATION")
+        val externalRoot = Environment.getExternalStorageDirectory()
+        val commonDirs = listOf(
+            "", "Download", "Downloads", "Movies", "Video", "Videos",
+            "DCIM", "Documents", "Media"
+        )
+        for (dir in commonDirs) {
+            val candidate = File(File(externalRoot, dir), displayName)
+            if (candidate.exists() && candidate.isFile) {
+                Log.d(TAG, "resolveViaDisplayName: found in common dir: ${candidate.absolutePath}")
+                return candidate.absolutePath
+            }
+        }
+
+        return null
     }
 
     private fun pathExists(path: String): Boolean = File(path).exists()
@@ -692,6 +767,8 @@ internal class SubtitleManager(
     }
 
     companion object {
+        private const val TAG = "SubtitleManager"
+
         private val STYLE_PRESETS = listOf(
             SubtitleStyleState(),
             SubtitleStyleState(fontSizeSp = 20, isBold = true, foregroundColor = Color.YELLOW),
