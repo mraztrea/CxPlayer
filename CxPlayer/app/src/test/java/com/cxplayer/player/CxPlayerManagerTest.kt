@@ -9,8 +9,10 @@ import com.cxplayer.ui.player.PlaybackRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.Proxy
 
 class CxPlayerManagerTest {
     @Test
@@ -180,6 +182,24 @@ class CxPlayerManagerTest {
         assertEquals(3_000L, session.lastStartPositionMs)
     }
 
+    @Test
+    fun `subtitle session controller is available for active playback and cleared on release`() {
+        val factory = FakePlayerSessionFactory()
+        val manager = CxPlayerManager(factory)
+
+        assertNull(manager.subtitleSessionController())
+
+        manager.load(buildRequest(startIndex = 0, startPositionMs = 0L))
+
+        assertNotNull(manager.activePlayer())
+        assertNotNull(manager.subtitleSessionController())
+
+        manager.release()
+
+        assertNull(manager.activePlayer())
+        assertNull(manager.subtitleSessionController())
+    }
+
     private fun buildRequest(startIndex: Int, startPositionMs: Long): PlaybackRequest {
         return PlaybackRequest(
             sources = listOf(
@@ -217,7 +237,7 @@ private class FakePlayerSessionFactory : PlayerSessionFactory {
 }
 
 private class FakePlayerSession : PlayerSession {
-    override val player: Player? = null
+    override val player: Player = fakePlayerProxy()
 
     override var playWhenReady: Boolean = false
     override var playbackSpeed: Float = 1f
@@ -265,4 +285,20 @@ private class FakePlayerSession : PlayerSession {
         released = true
         playbackState = Player.STATE_IDLE
     }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun fakePlayerProxy(): Player {
+    return Proxy.newProxyInstance(
+        Player::class.java.classLoader,
+        arrayOf(Player::class.java)
+    ) { _, method, _ ->
+        when (method.returnType) {
+            java.lang.Boolean.TYPE -> false
+            java.lang.Integer.TYPE -> 0
+            java.lang.Long.TYPE -> 0L
+            java.lang.Float.TYPE -> 0f
+            else -> null
+        }
+    } as Player
 }

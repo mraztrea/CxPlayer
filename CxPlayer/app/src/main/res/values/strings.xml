@@ -12,6 +12,14 @@
     <string name="player_seek_forward_content_description">Tua tiến 10 giây</string>
     <string name="player_volume_content_description">Âm lượng</string>
     <string name="player_settings_content_description">Cài đặt phát</string>
+    <string name="player_subtitle_picker_content_description">Chọn phụ đề ngoài</string>
+    <string name="player_subtitle_cycle_content_description">Chuyển phụ đề</string>
+    <string name="player_subtitle_style_content_description">Đổi kiểu phụ đề</string>
+    <string name="player_subtitle_feedback_none">Phụ đề: Tắt</string>
+    <string name="player_subtitle_feedback_loaded">Phụ đề: Đã nạp %1$s</string>
+    <string name="player_subtitle_feedback_style">Phụ đề: Kiểu %1$dsp</string>
+    <string name="player_subtitle_feedback_missing">Phụ đề: Không tìm thấy tệp phù hợp</string>
+    <string name="player_subtitle_feedback_unsupported">Phụ đề: Nguồn hiện tại không hỗ trợ tự dò</string>
     <string name="player_time_placeholder">--:--</string>
     <string name="player_gesture_overlay_volume_label">Âm lượng</string>
     <string name="player_gesture_overlay_brightness_label">Độ sáng</string>

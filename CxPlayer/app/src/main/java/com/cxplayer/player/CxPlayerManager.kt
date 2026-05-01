@@ -149,6 +149,12 @@ class CxPlayerManager internal constructor(
         latestState = PlaybackStateSnapshot(sessionState = PlaybackSessionState.Released)
     }
 
+    internal fun activePlayer(): Player? = session?.player
+
+    internal fun subtitleSessionController(): SubtitleSessionController? {
+        return activePlayer()?.let(::PlayerSubtitleSessionController)
+    }
+
     private fun ensureSession(): PlayerSession {
         return session ?: sessionFactory.create().also { createdSession ->
             session = createdSession

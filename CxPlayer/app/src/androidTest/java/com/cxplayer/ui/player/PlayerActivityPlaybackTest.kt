@@ -72,6 +72,92 @@ class PlayerActivityPlaybackTest {
     }
 
     @Test
+    fun localLaunchInitializesSubtitleHooksWithoutBreakingPlayback() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.hasSubtitleManager())
+                assertTrue(activity.currentAvailableSubtitleSourceCount() >= 1)
+                assertTrue(activity.cycleSubtitleSourceForTesting())
+                assertTrue(activity.advanceSubtitleStyleForTesting() > 0)
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+        }
+    }
+
+    @Test
+    fun localLaunchAutoDetectsSiblingSubtitleAndManualAttachKeepsPlaybackActive() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val videoFile = File(context.cacheDir, "subtitle-smoke-${SystemClock.uptimeMillis()}.mp4").apply {
+            writeBytes(byteArrayOf())
+        }
+        val siblingSubtitle = File(videoFile.parentFile, videoFile.nameWithoutExtension + ".srt").apply {
+            writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n")
+        }
+        val manualSubtitle = File(videoFile.parentFile, videoFile.nameWithoutExtension + ".vtt").apply {
+            writeText("WEBVTT\n\n00:00.000 --> 00:01.000\nXin chao\n")
+        }
+
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent(videoFile)).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.currentAvailableSubtitleSourceCount() >= 2)
+                assertTrue(activity.loadExternalSubtitleForTesting(Uri.fromFile(manualSubtitle)))
+                assertTrue(activity.currentAvailableSubtitleSourceCount() >= 2)
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+        }
+
+        siblingSubtitle.delete()
+        manualSubtitle.delete()
+        videoFile.delete()
+    }
+
+    @Test
+    fun subtitleSourceCycleCanTurnSubtitlesOffAfterExternalLoad() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val videoFile = File(context.cacheDir, "subtitle-off-${SystemClock.uptimeMillis()}.mp4").apply {
+            writeBytes(byteArrayOf())
+        }
+        val manualSubtitle = File(videoFile.parentFile, videoFile.nameWithoutExtension + ".srt").apply {
+            writeText("1\n00:00:00,000 --> 00:00:01,000\nXin chao\n")
+        }
+
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent(videoFile)).use { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.loadExternalSubtitleForTesting(Uri.fromFile(manualSubtitle)))
+                assertFalse(activity.isSubtitleDisabledForTesting())
+                assertTrue(activity.cycleSubtitleSourceForTesting())
+                assertTrue(activity.isSubtitleDisabledForTesting())
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+        }
+
+        manualSubtitle.delete()
+        videoFile.delete()
+    }
+
+    @Test
+    fun subtitleStyleCyclePersistsAcrossRecreateWithoutBreakingPlayback() {
+        ActivityScenario.launch<PlayerActivity>(buildLocalLaunchIntent()).use { scenario ->
+            var updatedFontSize = 0
+
+            scenario.onActivity { activity ->
+                val initialFontSize = activity.currentSubtitleStyleFontSizeForTesting()
+                updatedFontSize = activity.advanceSubtitleStyleForTesting()
+                assertTrue(updatedFontSize > 0)
+                assertTrue(updatedFontSize != initialFontSize)
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+
+            scenario.recreate()
+
+            scenario.onActivity { activity ->
+                assertEquals(updatedFontSize, activity.currentSubtitleStyleFontSizeForTesting())
+                assertNotNull(activity.currentPlaybackSnapshot())
+            }
+        }
+    }
+
+    @Test
     fun httpLaunchCreatesPlayableSessionWithoutCrashing() {
         ActivityScenario.launch<PlayerActivity>(buildNetworkLaunchIntent()).use { scenario ->
             scenario.onActivity { activity ->
@@ -342,15 +428,15 @@ class PlayerActivityPlaybackTest {
         }
     }
 
-    private fun buildLocalLaunchIntent(): Intent {
+    private fun buildLocalLaunchIntent(videoFile: File? = null): Intent {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val tempFile = File.createTempFile("player-activity", ".mp4", context.cacheDir)
-        if (!tempFile.exists()) {
-            tempFile.writeBytes(byteArrayOf())
+        val localVideoFile = videoFile ?: File.createTempFile("player-activity", ".mp4", context.cacheDir)
+        if (!localVideoFile.exists()) {
+            localVideoFile.writeBytes(byteArrayOf())
         }
 
         return Intent(context, PlayerActivity::class.java).apply {
-            data = Uri.fromFile(tempFile)
+            data = Uri.fromFile(localVideoFile)
             putExtra(PlayerLaunchExtras.EXTRA_START_POSITION_MS, 1_000L)
         }
     }

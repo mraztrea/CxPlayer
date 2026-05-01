@@ -14,6 +14,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -25,6 +26,7 @@ import com.cxplayer.databinding.ActivityPlayerBinding
 import com.cxplayer.player.CxPlayerManager
 import com.cxplayer.player.PlaybackSnapshot
 import com.cxplayer.player.PlaybackStateSnapshot
+import com.cxplayer.player.SubtitleManager
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
@@ -35,6 +37,8 @@ import kotlin.math.roundToInt
 private const val STATE_PLAYBACK_INDEX = "state_playback_index"
 private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
 private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
+private const val STATE_SUBTITLE_DISABLED_BY_USER = "state_subtitle_disabled_by_user"
+private const val STATE_SUBTITLE_STYLE_PRESET_INDEX = "state_subtitle_style_preset_index"
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -61,9 +65,16 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var volumeButton: ImageButton
     private lateinit var settingsButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
+    private val subtitlePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        loadPickedSubtitle(uri)
+    }
+    private var subtitleManager: SubtitleManager? = null
     private var pendingLaunch: PendingLaunch? = null
     private var pendingSnapshot: PlaybackSnapshot? = null
     private var activeRequest: PlaybackRequest? = null
+    private var subtitleDisabledByUser: Boolean = false
+    private var subtitleStylePresetIndex: Int = 0
     private var topSystemInsetPx: Int = 0
     private var bottomSystemInsetPx: Int = 0
     private var currentWindowBrightness: Float = 0.5f
@@ -99,6 +110,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingSnapshot = null
+        subtitleDisabledByUser = false
+        subtitleStylePresetIndex = 0
         updatePendingLaunch(intent)
         updateTopChrome()
         if (!isFinishing) {
@@ -118,11 +131,14 @@ class PlayerActivity : AppCompatActivity() {
             outState.putLong(STATE_PLAYBACK_POSITION_MS, snapshot.currentPositionMs)
             outState.putBoolean(STATE_PLAY_WHEN_READY, snapshot.playWhenReady)
         }
+        outState.putBoolean(STATE_SUBTITLE_DISABLED_BY_USER, subtitleDisabledByUser)
+        outState.putInt(STATE_SUBTITLE_STYLE_PRESET_INDEX, subtitleStylePresetIndex)
         super.onSaveInstanceState(outState)
     }
 
     override fun onStop() {
         captureSnapshot()
+        subtitleManager = null
         playerManager.release()
         syncPlayerState()
         super.onStop()
@@ -135,6 +151,7 @@ class PlayerActivity : AppCompatActivity() {
         if (::gestureOverlay.isInitialized) {
             gestureOverlay.removeCallbacks(hideGestureOverlayRunnable)
         }
+        subtitleManager = null
         playerManager.release()
         super.onDestroy()
     }
@@ -167,6 +184,40 @@ class PlayerActivity : AppCompatActivity() {
     internal fun currentPlaybackSnapshot(): PlaybackSnapshot? = playerManager.exportSnapshot()
 
     internal fun currentPlaybackState(): PlaybackStateSnapshot = playerManager.currentState()
+
+    internal fun hasSubtitleManager(): Boolean = subtitleManager != null
+
+    internal fun currentAvailableSubtitleSourceCount(): Int {
+        return subtitleManager?.availableSubtitleSources()?.size ?: 0
+    }
+
+    internal fun cycleSubtitleSourceForTesting(): Boolean {
+        return cycleSubtitleSource()
+    }
+
+    internal fun advanceSubtitleStyleForTesting(): Int {
+        val manager = subtitleManager ?: return 0
+        val updatedStyle = manager.cycleStylePreset()
+        subtitleStylePresetIndex = manager.currentStylePresetIndex()
+        return updatedStyle.fontSizeSp
+    }
+
+    internal fun currentSubtitleStyleFontSizeForTesting(): Int {
+        return subtitleManager?.currentStyleState()?.fontSizeSp ?: 0
+    }
+
+    internal fun loadExternalSubtitleForTesting(uri: Uri): Boolean {
+        val manager = subtitleManager ?: return false
+        val loaded = manager.loadExternalSubtitle(uri)
+        if (loaded) {
+            onSubtitleEnabled()
+        }
+        return loaded
+    }
+
+    internal fun isSubtitleDisabledForTesting(): Boolean {
+        return subtitleManager?.currentSelectionState()?.textTrackDisabled ?: true
+    }
 
     internal fun currentGestureBrightness(): Float {
         return window.attributes.screenBrightness.takeIf { it >= 0f } ?: currentWindowBrightness
@@ -231,6 +282,8 @@ class PlayerActivity : AppCompatActivity() {
             showMessage(messageResId)
             pendingLaunch = launch.copy(messageResId = null)
         }
+        refreshSubtitleManager()
+        autoDetectSubtitleForCurrentSource()
         pendingSnapshot = null
         syncPlayerState()
         updateTopChrome()
@@ -241,6 +294,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun restoreSnapshot(savedInstanceState: Bundle?): PlaybackSnapshot? {
+        subtitleDisabledByUser = savedInstanceState?.getBoolean(STATE_SUBTITLE_DISABLED_BY_USER, false) ?: false
+        subtitleStylePresetIndex = savedInstanceState?.getInt(STATE_SUBTITLE_STYLE_PRESET_INDEX, 0) ?: 0
         if (savedInstanceState == null || !savedInstanceState.containsKey(STATE_PLAYBACK_INDEX)) {
             return null
         }
@@ -281,7 +336,7 @@ class PlayerActivity : AppCompatActivity() {
         backButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
-        overflowButton.setOnClickListener { }
+        overflowButton.setOnClickListener { cycleSubtitleSource() }
     }
 
     private fun initializeBottomChrome() {
@@ -319,8 +374,101 @@ class PlayerActivity : AppCompatActivity() {
         }
         seekForwardButton.setOnClickListener { seekForward() }
         volumeButton.setOnClickListener { }
-        settingsButton.setOnClickListener { }
+        settingsButton.setOnClickListener { launchSubtitlePicker() }
+        settingsButton.setOnLongClickListener {
+            val fontSize = advanceSubtitleStyleForTesting()
+            if (fontSize > 0) {
+                showMessage(getString(R.string.player_subtitle_feedback_style, fontSize))
+                true
+            } else {
+                false
+            }
+        }
         updateBottomChrome()
+    }
+
+    private fun refreshSubtitleManager() {
+        subtitleManager = playerManager.subtitleSessionController()?.let { controller ->
+            SubtitleManager(
+                sessionController = controller,
+                playerView = playerView,
+                contentResolver = contentResolver
+            ).also { manager ->
+                manager.applyStylePreset(subtitleStylePresetIndex)
+            }
+        }
+    }
+
+    private fun launchSubtitlePicker() {
+        if (subtitleManager == null) {
+            return
+        }
+        subtitlePickerLauncher.launch(arrayOf("text/*", "application/octet-stream", "application/x-subrip"))
+    }
+
+    private fun autoDetectSubtitleForCurrentSource() {
+        if (subtitleDisabledByUser) {
+            return
+        }
+        val manager = subtitleManager ?: return
+        val currentSource = activeRequest
+            ?.sources
+            ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
+            ?: return
+        val detectionResult = manager.autoDetectExternalSubtitle(Uri.parse(currentSource.uriValue))
+        val subtitleFile = detectionResult.matchedFile ?: return
+        val loaded = manager.loadExternalSubtitle(
+            uri = Uri.fromFile(subtitleFile),
+            mimeType = detectionResult.matchedMimeType ?: manager.resolveSubtitleMimeTypeFromName(subtitleFile.name) ?: return,
+            isAutoDetected = true
+        )
+        if (loaded) {
+            onSubtitleEnabled()
+        }
+    }
+
+    private fun loadPickedSubtitle(uri: Uri) {
+        val manager = subtitleManager ?: return
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val loaded = manager.loadExternalSubtitle(uri)
+        if (loaded) {
+            onSubtitleEnabled(getString(R.string.player_subtitle_feedback_loaded, uri.lastPathSegment ?: "subtitle"))
+        }
+    }
+
+    private fun cycleSubtitleSource(): Boolean {
+        val manager = subtitleManager ?: return false
+        val sources = manager.availableSubtitleSources()
+        if (sources.isEmpty()) {
+            return false
+        }
+
+        val currentIndex = sources.indexOfFirst { it.isCurrentlySelected }.coerceAtLeast(0)
+        val nextSource = sources[(currentIndex + 1) % sources.size]
+        val changed = manager.selectSubtitleSource(nextSource.id)
+        if (!changed) {
+            return false
+        }
+
+        if (nextSource.id == "subtitle_source_off") {
+            onSubtitleDisabled()
+        } else {
+            onSubtitleEnabled(getString(R.string.player_subtitle_feedback_loaded, nextSource.label))
+        }
+        return true
+    }
+
+    private fun onSubtitleEnabled(feedbackMessage: CharSequence? = null) {
+        subtitleDisabledByUser = false
+        feedbackMessage?.let(::showMessage)
+        syncPlayerState()
+    }
+
+    private fun onSubtitleDisabled() {
+        subtitleDisabledByUser = true
+        showMessage(R.string.player_subtitle_feedback_none)
     }
 
     private fun initializeGestureOverlay() {
@@ -610,6 +758,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showMessage(@StringRes messageResId: Int) {
         Toast.makeText(this, messageResId, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showMessage(message: CharSequence) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }
 
