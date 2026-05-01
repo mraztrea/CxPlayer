@@ -413,7 +413,8 @@ class PlayerActivity : AppCompatActivity() {
             SubtitleManager(
                 sessionController = controller,
                 playerView = playerView,
-                contentResolver = contentResolver
+                contentResolver = contentResolver,
+                appContext = applicationContext
             ).also { manager ->
                 manager.applyStylePreset(subtitleStylePresetIndex)
             }
@@ -508,8 +509,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun applySelectedSubtitleTrack(optionId: String) {
         val manager = subtitleManager ?: return
-        val selectedSource = manager.availableSubtitleSources().firstOrNull { it.id == optionId } ?: return
+        val selectedSource = manager.availableSubtitleSources().firstOrNull { it.id == optionId }
+        android.util.Log.d("PlayerActivity", "applySubTrack: optionId=$optionId, found=${selectedSource != null}, sourceKind=${selectedSource?.kind}, uriValue=${selectedSource?.uriValue}")
+        if (selectedSource == null) return
         val changed = manager.selectSubtitleSource(optionId)
+        android.util.Log.d("PlayerActivity", "applySubTrack: changed=$changed")
         if (!changed) {
             return
         }
@@ -540,8 +544,13 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val subtitleFile = detectionResult.matchedFile ?: return
+        val subtitleUri = runCatching {
+            androidx.core.content.FileProvider.getUriForFile(
+                this, "${packageName}.fileprovider", subtitleFile
+            )
+        }.getOrNull() ?: Uri.fromFile(subtitleFile)
         val loaded = manager.loadExternalSubtitle(
-            uri = Uri.fromFile(subtitleFile),
+            uri = subtitleUri,
             mimeType = detectionResult.matchedMimeType ?: manager.resolveSubtitleMimeTypeFromName(subtitleFile.name) ?: return,
             isAutoDetected = true
         )

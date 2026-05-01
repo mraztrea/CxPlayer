@@ -1,6 +1,7 @@
 package com.cxplayer.player
 
 import android.content.ContentResolver
+import android.content.Context
 import android.database.Cursor
 import android.graphics.Color
 import android.graphics.Typeface
@@ -11,6 +12,7 @@ import android.util.Log
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.TypedValue
+import androidx.core.content.FileProvider
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -194,7 +196,8 @@ internal class PlayerSubtitleSessionController(
 internal class SubtitleManager(
     private val sessionController: SubtitleSessionController,
     private val playerView: PlayerView? = null,
-    private val contentResolver: ContentResolver? = null
+    private val contentResolver: ContentResolver? = null,
+    private val appContext: Context? = null
 ) {
     private var styleState = SubtitleStyleState()
     private var selectionState = SubtitleSelectionState()
@@ -332,7 +335,12 @@ internal class SubtitleManager(
         mimeType: String = resolveSubtitleMimeType(uri) ?: MimeTypes.APPLICATION_SUBRIP,
         isAutoDetected: Boolean = false
     ): Boolean {
-        val currentMediaItem = sessionController.currentMediaItem ?: return false
+        Log.d(TAG, "loadExtSub: uri=$uri, mimeType=$mimeType, isAutoDetected=$isAutoDetected")
+        val currentMediaItem = sessionController.currentMediaItem
+        if (currentMediaItem == null) {
+            Log.d(TAG, "loadExtSub: FAILED - currentMediaItem is null")
+            return false
+        }
         val subtitleConfiguration = MediaItem.SubtitleConfiguration.Builder(uri)
             .setMimeType(mimeType)
             .setLanguage(DEFAULT_SUBTITLE_LANGUAGE)
@@ -352,6 +360,7 @@ internal class SubtitleManager(
         sessionController.enableTextTracks()
         sessionController.setMediaItem(updatedItem, selectionState.preservedPositionMs)
         sessionController.prepare()
+        Log.d(TAG, "loadExtSub: SUCCESS - subtitle applied")
         return true
     }
 
@@ -471,7 +480,8 @@ internal class SubtitleManager(
 
     internal fun syncDetectedExternalSubtitleSources(matchedFiles: List<DetectedSubtitleFile>) {
         val detectedSources = matchedFiles.map { detectedFile ->
-            val uriValue = "file://${detectedFile.file.absolutePath}"
+            val uriValue = fileToContentUri(detectedFile.file)?.toString()
+                ?: "file://${detectedFile.file.absolutePath}"
             SubtitleSourceDescriptor(
                 id = externalSourceId(uriValue),
                 kind = SubtitleSourceKind.External,
@@ -490,7 +500,9 @@ internal class SubtitleManager(
     }
 
     private fun selectExternalSubtitleSource(source: SubtitleSourceDescriptor): Boolean {
+        Log.d(TAG, "selectExtSub: id=${source.id}, uriValue=${source.uriValue}, activeSourceId=${selectionState.activeSourceId}, textTrackDisabled=${selectionState.textTrackDisabled}")
         if (selectionState.activeSourceId == source.id && !selectionState.textTrackDisabled) {
+            Log.d(TAG, "selectExtSub: already selected, re-enabling tracks")
             selectionState = selectionState.copy(
                 activeSourceId = source.id,
                 textTrackDisabled = false,
@@ -501,7 +513,11 @@ internal class SubtitleManager(
             return true
         }
 
-        val sourceUri = source.uriValue?.let(Uri::parse) ?: return false
+        val sourceUri = source.uriValue?.let(Uri::parse)
+        if (sourceUri == null) {
+            Log.d(TAG, "selectExtSub: FAILED - uriValue is null")
+            return false
+        }
         val mimeType = source.mimeType ?: resolveSubtitleMimeTypeFromName(source.label) ?: MimeTypes.APPLICATION_SUBRIP
         return loadExternalSubtitle(
             uri = sourceUri,
@@ -673,6 +689,13 @@ internal class SubtitleManager(
         }
 
         return null
+    }
+
+    private fun fileToContentUri(file: File): Uri? {
+        val ctx = appContext ?: return null
+        return runCatching {
+            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+        }.getOrNull()
     }
 
     private fun pathExists(path: String): Boolean = File(path).exists()
