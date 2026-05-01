@@ -480,7 +480,7 @@ internal class SubtitleManager(
 
     internal fun syncDetectedExternalSubtitleSources(matchedFiles: List<DetectedSubtitleFile>) {
         val detectedSources = matchedFiles.map { detectedFile ->
-            val uriValue = fileToContentUri(detectedFile.file)?.toString()
+            val uriValue = copyToCacheAndGetUri(detectedFile.file)?.toString()
                 ?: "file://${detectedFile.file.absolutePath}"
             SubtitleSourceDescriptor(
                 id = externalSourceId(uriValue),
@@ -501,17 +501,6 @@ internal class SubtitleManager(
 
     private fun selectExternalSubtitleSource(source: SubtitleSourceDescriptor): Boolean {
         Log.d(TAG, "selectExtSub: id=${source.id}, uriValue=${source.uriValue}, activeSourceId=${selectionState.activeSourceId}, textTrackDisabled=${selectionState.textTrackDisabled}")
-        if (selectionState.activeSourceId == source.id && !selectionState.textTrackDisabled) {
-            Log.d(TAG, "selectExtSub: already selected, re-enabling tracks")
-            selectionState = selectionState.copy(
-                activeSourceId = source.id,
-                textTrackDisabled = false,
-                preservedPositionMs = sessionController.currentPositionMs,
-                preservedPlayWhenReady = sessionController.playWhenReady
-            )
-            sessionController.enableTextTracks()
-            return true
-        }
 
         val sourceUri = source.uriValue?.let(Uri::parse)
         if (sourceUri == null) {
@@ -691,10 +680,21 @@ internal class SubtitleManager(
         return null
     }
 
-    private fun fileToContentUri(file: File): Uri? {
+    private fun copyToCacheAndGetUri(file: File): Uri? {
         val ctx = appContext ?: return null
         return runCatching {
-            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+            val subtitleCacheDir = File(ctx.cacheDir, "subtitles")
+            subtitleCacheDir.mkdirs()
+            val cachedFile = File(subtitleCacheDir, file.name)
+            file.inputStream().use { input ->
+                cachedFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.d(TAG, "copyToCache: copied '${file.name}' to '${cachedFile.absolutePath}'")
+            Uri.fromFile(cachedFile)
+        }.onFailure { e ->
+            Log.d(TAG, "copyToCache: FAILED for '${file.name}': ${e.message}")
         }.getOrNull()
     }
 

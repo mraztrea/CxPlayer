@@ -544,10 +544,15 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val subtitleFile = detectionResult.matchedFile ?: return
+        // Copy subtitle to cache dir so ExoPlayer can read it without scoped storage restrictions
+        val subtitleCacheDir = File(cacheDir, "subtitles")
+        subtitleCacheDir.mkdirs()
+        val cachedFile = File(subtitleCacheDir, subtitleFile.name)
         val subtitleUri = runCatching {
-            androidx.core.content.FileProvider.getUriForFile(
-                this, "${packageName}.fileprovider", subtitleFile
-            )
+            subtitleFile.inputStream().use { input ->
+                cachedFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            Uri.fromFile(cachedFile)
         }.getOrNull() ?: Uri.fromFile(subtitleFile)
         val loaded = manager.loadExternalSubtitle(
             uri = subtitleUri,
