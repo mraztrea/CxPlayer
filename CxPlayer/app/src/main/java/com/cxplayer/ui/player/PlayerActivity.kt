@@ -429,6 +429,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showTrackSelector(): Boolean {
+        autoDetectSubtitleForCurrentSource()
         val model = buildTrackSelectorModel() ?: run {
             showMessage(R.string.player_track_selector_feedback_selector_unavailable)
             return false
@@ -471,9 +472,14 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun toSubtitleOptionUiModel(source: SubtitleSourceDescriptor): TrackSelectorOptionUiModel {
+        val label = if (SubtitleManager.isOffSourceId(source.id)) {
+            getString(R.string.player_subtitle_feedback_none).substringAfter(": ").trim()
+        } else {
+            source.label
+        }
         return TrackSelectorOptionUiModel(
             id = source.id,
-            label = source.label,
+            label = label,
             isSelected = source.isCurrentlySelected,
             isEnabled = true
         )
@@ -523,6 +529,10 @@ class PlayerActivity : AppCompatActivity() {
             ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
             ?: return
         val detectionResult = manager.autoDetectExternalSubtitle(Uri.parse(currentSource.uriValue))
+        
+        // List is updated inside autoDetectExternalSubtitle, so we continue even if disabled
+        // to ensure the UI model gets the detected sources.
+
         if (subtitleDisabledByUser) {
             return
         }

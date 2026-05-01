@@ -10,6 +10,7 @@ shell commands, and other important information, read the current plan:
 - Nếu sửa vào nhiều file code, hãy tạo 1 file work flow , tên file dạng wf_{YYYYMMDD}_{tên workflow}.md trong thư mục memory_bank. Nếu quá trình làm việc cần migrate database hay cần chạy lệnh gì, hãy thêm hướng dẫn vào file này.
 **- Lập trình trên môi trường windows nên hãy sử dụng các lệnh terminal của PowerShell (sử dụng pwsh  thay cho powershell), không sử dụng các lệnh linux.**
 - Nội dung của git commit phải sử dụng tiếng Việt. Vẫn giữ nguyên các tiền tố như: "fix", "feat", "docs", "style", "refactor", "perf", "test", "chore", "revert"
+- **CHANGELOG TRACKING**: Mỗi khi hoàn thành sửa/thêm 1 tính năng, PHẢI update dòng "Hello $name!" trong [MainActivity.kt](CxPlayer/app/src/main/java/com/cxplayer/MainActivity.kt#L36) thành changelog ngắn gọn. Format: `[FEATURE/FIX]: Mô tả tính năng - ngày giờ`. Ví dụ: `[FEATURE]: Track selector UI - 2026-05-01` hoặc `[FIX]: Subtitle timing sync - 2026-05-01`.
 - Nếu cần sử dụng Serena MCP, hãy thực hiện `activate_project` và `check_onboarding_performed` trước khi bắt đầu sử dụng. Chi tiết xem mục **Serena MCP** bên dưới.
 
 # First Rule

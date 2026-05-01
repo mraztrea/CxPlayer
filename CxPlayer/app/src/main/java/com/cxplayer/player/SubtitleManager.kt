@@ -277,13 +277,7 @@ internal class SubtitleManager(
             )
 
         val videoFile = File(resolvedVideoPath)
-        val parentDirectory = videoFile.parentFile
-            ?: return SubtitleDetectionResult(
-                status = SubtitleDetectionStatus.NotFound,
-                matchedFiles = emptyList(),
-                attemptedExtensions = attemptedExtensions
-            )
-        val siblingFiles = parentDirectory.listFiles()
+        val siblingFiles = listSiblingFiles(videoFile)
             ?: return SubtitleDetectionResult(
                 status = SubtitleDetectionStatus.Unreadable,
                 matchedFiles = emptyList(),
@@ -292,8 +286,6 @@ internal class SubtitleManager(
 
         val videoBaseName = videoFile.nameWithoutExtension
         val matchedFiles = siblingFiles
-            .asSequence()
-            .filter { it.isFile }
             .mapNotNull { candidateFile ->
                 val mimeType = resolveSubtitleMimeTypeFromName(candidateFile.name) ?: return@mapNotNull null
                 if (!matchesSubtitleFilePattern(videoBaseName, candidateFile.name)) {
@@ -471,7 +463,7 @@ internal class SubtitleManager(
 
     internal fun syncDetectedExternalSubtitleSources(matchedFiles: List<DetectedSubtitleFile>) {
         val detectedSources = matchedFiles.map { detectedFile ->
-            val uriValue = detectedFile.file.toURI().toString()
+            val uriValue = "file://${detectedFile.file.absolutePath}"
             SubtitleSourceDescriptor(
                 id = externalSourceId(uriValue),
                 kind = SubtitleSourceKind.External,
@@ -540,7 +532,6 @@ internal class SubtitleManager(
 
     private fun resolveContentVideoPath(videoUri: Uri): String? {
         resolvePathFromDocumentId(videoUri)
-            ?.takeIf(::pathExists)
             ?.let { return it }
 
         val resolver = contentResolver ?: return null
@@ -555,13 +546,11 @@ internal class SubtitleManager(
             }
 
             readStringColumn(contentCursor, "_data")
-                ?.takeIf(::pathExists)
                 ?.let { return it }
 
             val relativePath = readStringColumn(contentCursor, MediaStore.MediaColumns.RELATIVE_PATH)
             val displayName = readStringColumn(contentCursor, MediaStore.MediaColumns.DISPLAY_NAME)
             buildPrimaryExternalStoragePath(relativePath, displayName)
-                ?.takeIf(::pathExists)
                 ?.let { return it }
         }
 
@@ -609,6 +598,73 @@ internal class SubtitleManager(
     }
 
     private fun pathExists(path: String): Boolean = File(path).exists()
+
+    private fun listSiblingFiles(videoFile: File): List<File>? {
+        val parent = videoFile.parentFile ?: return null
+        val files = parent.listFiles()
+        if (files != null) return files.toList()
+
+        val mediaStoreResults = querySiblingsFromMediaStore(parent.absolutePath)
+        if (mediaStoreResults.isNotEmpty()) return mediaStoreResults
+
+        val probedFiles = probeSubtitleFilesByPattern(parent, videoFile.nameWithoutExtension)
+        return probedFiles.ifEmpty { null }
+    }
+
+    private fun probeSubtitleFilesByPattern(parentDir: File, videoBaseName: String): List<File> {
+        val results = mutableListOf<File>()
+        val extensions = supportedSubtitleExtensions()
+
+        for (ext in extensions) {
+            val exactMatch = File(parentDir, "$videoBaseName$ext")
+            if (exactMatch.exists() && exactMatch.isFile) {
+                results.add(exactMatch)
+            }
+        }
+
+        val commonLanguageCodes = listOf(
+            "vi", "en", "ja", "ko", "zh", "fr", "de", "es",
+            "pt", "ru", "th", "id", "ar", "hi", "it", "pl"
+        )
+        for (lang in commonLanguageCodes) {
+            for (ext in extensions) {
+                val langMatch = File(parentDir, "$videoBaseName.$lang$ext")
+                if (langMatch.exists() && langMatch.isFile) {
+                    results.add(langMatch)
+                }
+            }
+        }
+
+        return results.distinctBy { it.absolutePath }
+    }
+
+    private fun querySiblingsFromMediaStore(parentPath: String): List<File> {
+        val resolver = contentResolver ?: return emptyList()
+        val results = mutableListOf<File>()
+        val projection = arrayOf(MediaStore.MediaColumns.DATA)
+        val selection = "${MediaStore.MediaColumns.DATA} LIKE ? AND ${MediaStore.MediaColumns.DATA} NOT LIKE ?"
+        val selectionArgs = arrayOf("$parentPath/%", "$parentPath/%/%")
+
+        runCatching {
+            resolver.query(
+                MediaStore.Files.getContentUri("external"),
+                projection,
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                val dataIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                if (dataIndex >= 0) {
+                    while (cursor.moveToNext()) {
+                        cursor.getString(dataIndex)?.let { path ->
+                            results.add(File(path))
+                        }
+                    }
+                }
+            }
+        }
+        return results
+    }
 
     private fun applyStyleToView() {
         val subtitleView = playerView?.subtitleView ?: return

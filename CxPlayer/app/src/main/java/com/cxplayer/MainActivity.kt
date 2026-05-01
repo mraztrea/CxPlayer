@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "Hello $name!",
+        text = "[FIX]: Sửa lỗi autoload phụ đề ngoài - thêm probe fallback khi scoped storage chặn listFiles - 2026-05-01",
         modifier = modifier
     )
 }
