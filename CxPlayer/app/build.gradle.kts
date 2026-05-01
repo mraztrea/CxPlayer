@@ -40,6 +40,9 @@ android {
         compose = true
         viewBinding = true
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

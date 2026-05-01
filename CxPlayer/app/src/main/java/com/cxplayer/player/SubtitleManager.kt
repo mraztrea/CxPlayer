@@ -290,10 +290,13 @@ internal class SubtitleManager(
             )
 
         val videoBaseName = videoFile.nameWithoutExtension
+        Log.d(TAG, "detect: videoBaseName='$videoBaseName', siblingCount=${siblingFiles.size}, siblings=${siblingFiles.map { it.name }}")
         val matchedFiles = siblingFiles
             .mapNotNull { candidateFile ->
                 val mimeType = resolveSubtitleMimeTypeFromName(candidateFile.name) ?: return@mapNotNull null
-                if (!matchesSubtitleFilePattern(videoBaseName, candidateFile.name)) {
+                val matches = matchesSubtitleFilePattern(videoBaseName, candidateFile.name)
+                Log.d(TAG, "detect: candidate='${candidateFile.name}', mime=$mimeType, matches=$matches")
+                if (!matches) {
                     return@mapNotNull null
                 }
                 DetectedSubtitleFile(
@@ -677,12 +680,15 @@ internal class SubtitleManager(
     private fun listSiblingFiles(videoFile: File): List<File>? {
         val parent = videoFile.parentFile ?: return null
         val files = parent.listFiles()
-        if (files != null) return files.toList()
+        Log.d(TAG, "listSiblings: parent='${parent.absolutePath}', listFiles=${files?.size}")
+        if (files != null && files.isNotEmpty()) return files.toList()
 
         val mediaStoreResults = querySiblingsFromMediaStore(parent.absolutePath)
+        Log.d(TAG, "listSiblings: mediaStore=${mediaStoreResults.size}")
         if (mediaStoreResults.isNotEmpty()) return mediaStoreResults
 
         val probedFiles = probeSubtitleFilesByPattern(parent, videoFile.nameWithoutExtension)
+        Log.d(TAG, "listSiblings: probed=${probedFiles.size}, files=${probedFiles.map { it.name }}")
         return probedFiles.ifEmpty { null }
     }
 
