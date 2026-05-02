@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FEATURE]: Player GUI redesign + Auto-hide chrome + Immersive mode - 2026-05-02",
+        text = "[FIX]: Gom AI subtitle theo câu thay vì từng token - 2026-05-02 23:09",
         modifier = modifier
     )
 }

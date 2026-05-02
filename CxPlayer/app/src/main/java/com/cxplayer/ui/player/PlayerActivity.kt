@@ -1,25 +1,30 @@
 package com.cxplayer.ui.player
-
+import android.graphics.Typeface
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.ViewCompat
@@ -33,17 +38,25 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
 import com.cxplayer.databinding.ActivityPlayerBinding
+import com.cxplayer.data.model.SonioxConfig
+import com.cxplayer.data.model.SubtitleDisplayMode
+import com.cxplayer.data.model.SubtitleEvent
 import com.cxplayer.network.NetworkCredentialSet
 import com.cxplayer.network.SharedLibraryEntry
 import com.cxplayer.network.SharedLibraryEntryType
 import com.cxplayer.player.AudioTrackDescriptor
 import com.cxplayer.player.CxPlayerManager
+import com.cxplayer.player.CxRenderersFactory
 import com.cxplayer.player.CxRepeatMode
 import com.cxplayer.player.PlaybackSnapshot
 import com.cxplayer.player.PlaybackStateSnapshot
 import com.cxplayer.player.SubtitleSourceDescriptor
 import com.cxplayer.player.SubtitleSourceKind
 import com.cxplayer.player.SubtitleManager
+import com.cxplayer.subtitle.AiSubtitleManager
+import com.cxplayer.subtitle.ConnectionState
+import com.cxplayer.subtitle.SrtExporter
+import com.cxplayer.subtitle.SubtitleCacheManager
 import com.cxplayer.ui.controls.NetworkBrowserDialog
 import com.cxplayer.ui.controls.TrackSelector
 import com.cxplayer.ui.controls.TrackSelectorOptionUiModel
@@ -51,6 +64,13 @@ import com.cxplayer.ui.controls.TrackSelectorSection
 import com.cxplayer.ui.controls.TrackSelectorSectionUiModel
 import com.cxplayer.ui.controls.TrackSelectorSelection
 import com.cxplayer.ui.controls.TrackSelectorUiModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileNotFoundException
 import java.net.URI
@@ -67,6 +87,7 @@ private const val STATE_SCREEN_LOCKED = "state_screen_locked"
 private const val STATE_RESIZE_MODE = "state_resize_mode"
 private const val STATE_AUTOPLAY_ENABLED = "state_autoplay_enabled"
 private const val ACTION_OPEN_INTERNAL_SMB = "com.cxplayer.action.OPEN_INTERNAL_SMB"
+private const val PREF_SONIOX_API_KEY = "pref_soniox_api_key"
 
 private val SPEED_VALUES = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 private const val DEFAULT_SPEED_INDEX = 3
@@ -100,6 +121,11 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var shuffleButton: ImageButton
     private lateinit var repeatButton: ImageButton
     private lateinit var trackSelectorButton: ImageButton
+    private lateinit var aiSubtitleButton: ImageButton
+    private lateinit var aiSubtitleOverlay: LinearLayout
+    private lateinit var aiSubtitleOriginalText: TextView
+    private lateinit var aiSubtitleTranslationText: TextView
+    private lateinit var aiSubtitleStatusText: TextView
     private lateinit var functionRow: HorizontalScrollView
     private lateinit var lockButton: ImageButton
     private lateinit var unlockButton: ImageButton
@@ -141,6 +167,16 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
     private val hideChromeRunnable = Runnable { hideChrome() }
+
+    // AI Subtitle
+    private val aiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var aiSubtitleManager: AiSubtitleManager? = null
+    private var aiSubtitleCollectJob: Job? = null
+    private var aiConnectionCollectJob: Job? = null
+    private val subtitleCacheManager by lazy(LazyThreadSafetyMode.NONE) { SubtitleCacheManager(this) }
+    private val prefs: SharedPreferences by lazy {
+        getSharedPreferences("cxplayer_prefs", MODE_PRIVATE)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -213,6 +249,11 @@ class PlayerActivity : AppCompatActivity() {
         if (::gestureOverlay.isInitialized) {
             gestureOverlay.removeCallbacks(hideGestureOverlayRunnable)
         }
+        // AI Subtitle cleanup
+        aiSubtitleManager?.stop()
+        aiSubtitleCollectJob?.cancel()
+        aiConnectionCollectJob?.cancel()
+        aiScope.cancel()
         autoHideHandler.removeCallbacksAndMessages(null)
         subtitleManager = null
         playerManager.release()
@@ -423,6 +464,11 @@ class PlayerActivity : AppCompatActivity() {
         shuffleButton = binding.playerShuffleButton
         repeatButton = binding.playerRepeatButton
         trackSelectorButton = binding.playerTrackSelectorButton
+        aiSubtitleButton = binding.playerAiSubtitleButton
+        aiSubtitleOverlay = binding.aiSubtitleOverlay
+        aiSubtitleOriginalText = binding.aiSubtitleOriginalText
+        aiSubtitleTranslationText = binding.aiSubtitleTranslationText
+        aiSubtitleStatusText = binding.aiSubtitleStatusText
         functionRow = binding.playerFunctionRow
         lockButton = binding.playerLockButton
         unlockButton = binding.playerUnlockButton
@@ -440,6 +486,8 @@ class PlayerActivity : AppCompatActivity() {
             onBackPressedDispatcher.onBackPressed()
         }
         overflowButton.setOnClickListener { showOverflowMenu() }
+        aiSubtitleButton.setOnClickListener { toggleAiSubtitle() }
+        aiSubtitleButton.setOnLongClickListener { showDisplayModeDialog(); true }
         overflowButton.setOnLongClickListener { showNetworkBrowser() }
     }
 
@@ -1300,6 +1348,240 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showMessage(message: CharSequence) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // AI Subtitle Methods
+    // ═══════════════════════════════════════════════════════════
+
+    private fun toggleAiSubtitle() {
+        val manager = aiSubtitleManager
+        if (manager != null && manager.isActive.value) {
+            stopAiSubtitle()
+        } else {
+            startAiSubtitle()
+        }
+    }
+
+    private fun startAiSubtitle() {
+        val apiKey = prefs.getString(PREF_SONIOX_API_KEY, null)
+        if (apiKey.isNullOrBlank()) {
+            showApiKeyDialog()
+            return
+        }
+        doStartAiSubtitle(apiKey)
+    }
+
+    private fun doStartAiSubtitle(apiKey: String) {
+        val manager = AiSubtitleManager(aiScope)
+        aiSubtitleManager = manager
+        val config = SonioxConfig(apiKey = apiKey)
+
+        // Hook audio processor callback
+        val renderersFactory = playerManager.renderersFactory()
+        if (renderersFactory is CxRenderersFactory) {
+            renderersFactory.audioProcessor.onPcmData = { pcmData ->
+                manager.onAudioData(pcmData)
+            }
+        }
+
+        manager.start(config)
+        showMessage(R.string.player_ai_subtitle_on)
+        aiSubtitleButton.alpha = 1.0f
+        aiSubtitleOverlay.visibility = View.VISIBLE
+
+        // Collect subtitle events
+        aiSubtitleCollectJob = aiScope.launch {
+            manager.subtitleFlow.collect { event ->
+                renderAiSubtitleEvent(event, manager.displayMode.value)
+            }
+        }
+
+        // Collect connection state changes
+        aiConnectionCollectJob = aiScope.launch {
+            manager.connectionState.collectLatest { state ->
+                updateAiConnectionStatus(state)
+            }
+        }
+    }
+
+    private fun stopAiSubtitle() {
+        val manager = aiSubtitleManager ?: return
+        val entries = manager.stop()
+
+        // Clear audio callback
+        val renderersFactory = playerManager.renderersFactory()
+        if (renderersFactory is CxRenderersFactory) {
+            renderersFactory.audioProcessor.onPcmData = null
+        }
+
+        aiSubtitleCollectJob?.cancel()
+        aiConnectionCollectJob?.cancel()
+        aiSubtitleManager = null
+        aiSubtitleButton.alpha = 0.7f
+        aiSubtitleOverlay.visibility = View.GONE
+        aiSubtitleOriginalText.text = ""
+        aiSubtitleTranslationText.text = ""
+        showMessage(R.string.player_ai_subtitle_off)
+
+        // Offer SRT export if we have entries
+        if (entries.isNotEmpty()) {
+            showSrtExportDialog(entries)
+        }
+
+        // Save to cache
+        val videoUri = resolveCurrentVideoUri()
+        if (videoUri != null && entries.isNotEmpty()) {
+            aiScope.launch(Dispatchers.IO) {
+                subtitleCacheManager.saveSubtitle(
+                    videoUri = videoUri,
+                    entries = entries,
+                    language = "auto",
+                    targetLanguage = "vi"
+                )
+            }
+        }
+    }
+
+    private fun renderAiSubtitleEvent(event: SubtitleEvent, displayMode: SubtitleDisplayMode) {
+        runOnUiThread {
+            when (event) {
+                is SubtitleEvent.Snapshot -> {
+                    val showOriginal = displayMode != SubtitleDisplayMode.TRANSLATION_ONLY &&
+                        event.originalText.isNotBlank()
+                    val showTranslation = displayMode != SubtitleDisplayMode.ORIGINAL_ONLY &&
+                        event.translationText.isNotBlank()
+
+                    aiSubtitleOriginalText.text = event.originalText
+                    aiSubtitleOriginalText.visibility = if (showOriginal) View.VISIBLE else View.GONE
+                    aiSubtitleOriginalText.setTypeface(
+                        null,
+                        if (event.isOriginalProvisional) Typeface.ITALIC else Typeface.NORMAL
+                    )
+
+                    aiSubtitleTranslationText.text = event.translationText
+                    aiSubtitleTranslationText.visibility = if (showTranslation) View.VISIBLE else View.GONE
+                }
+            }
+        }
+    }
+
+    private fun updateAiConnectionStatus(state: ConnectionState) {
+        runOnUiThread {
+            when (state) {
+                ConnectionState.CONNECTING -> {
+                    aiSubtitleStatusText.text = getString(R.string.player_ai_subtitle_connecting)
+                    aiSubtitleStatusText.visibility = View.VISIBLE
+                }
+                ConnectionState.RECONNECTING -> {
+                    aiSubtitleStatusText.text = getString(R.string.player_ai_subtitle_reconnecting)
+                    aiSubtitleStatusText.visibility = View.VISIBLE
+                }
+                ConnectionState.FAILED -> {
+                    aiSubtitleStatusText.visibility = View.GONE
+                    showMessage(R.string.player_ai_subtitle_failed)
+                    stopAiSubtitle()
+                }
+                ConnectionState.ACTIVE -> {
+                    aiSubtitleStatusText.visibility = View.GONE
+                }
+                else -> { /* IDLE, ERROR handled by reconnect */ }
+            }
+        }
+    }
+
+    private fun showApiKeyDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.player_ai_subtitle_api_key_hint)
+            setSingleLine()
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.player_ai_subtitle_api_key_title)
+            .setMessage(R.string.player_ai_subtitle_api_key_required)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val key = input.text.toString().trim()
+                if (key.isNotEmpty()) {
+                    prefs.edit().putString(PREF_SONIOX_API_KEY, key).apply()
+                    doStartAiSubtitle(key)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showDisplayModeDialog() {
+        val manager = aiSubtitleManager ?: return
+        val modes = arrayOf(
+            getString(R.string.player_ai_subtitle_mode_original),
+            getString(R.string.player_ai_subtitle_mode_translation),
+            getString(R.string.player_ai_subtitle_mode_both)
+        )
+        val currentIndex = when (manager.displayMode.value) {
+            SubtitleDisplayMode.ORIGINAL_ONLY -> 0
+            SubtitleDisplayMode.TRANSLATION_ONLY -> 1
+            SubtitleDisplayMode.BOTH -> 2
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.player_ai_subtitle_display_mode_title)
+            .setSingleChoiceItems(modes, currentIndex) { dialog, which ->
+                val mode = when (which) {
+                    0 -> SubtitleDisplayMode.ORIGINAL_ONLY
+                    1 -> SubtitleDisplayMode.TRANSLATION_ONLY
+                    else -> SubtitleDisplayMode.BOTH
+                }
+                manager.setDisplayMode(mode)
+                updateDisplayModeVisibility(mode)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun updateDisplayModeVisibility(mode: SubtitleDisplayMode) {
+        when (mode) {
+            SubtitleDisplayMode.ORIGINAL_ONLY -> {
+                aiSubtitleOriginalText.visibility = View.VISIBLE
+                aiSubtitleTranslationText.visibility = View.GONE
+            }
+            SubtitleDisplayMode.TRANSLATION_ONLY -> {
+                aiSubtitleOriginalText.visibility = View.GONE
+                aiSubtitleTranslationText.visibility = View.VISIBLE
+            }
+            SubtitleDisplayMode.BOTH -> {
+                aiSubtitleOriginalText.visibility = View.VISIBLE
+                aiSubtitleTranslationText.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun showSrtExportDialog(entries: List<com.cxplayer.data.model.SrtEntry>) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.player_ai_subtitle_export_title)
+            .setMessage(R.string.player_ai_subtitle_export_message)
+            .setPositiveButton(R.string.player_ai_subtitle_export_yes) { _, _ ->
+                exportSrtFile(entries)
+            }
+            .setNegativeButton(R.string.player_ai_subtitle_export_no, null)
+            .show()
+    }
+
+    private fun exportSrtFile(entries: List<com.cxplayer.data.model.SrtEntry>) {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val fileName = "CxPlayer_AI_${System.currentTimeMillis()}.srt"
+        val file = File(downloadsDir, fileName)
+        try {
+            SrtExporter.write(entries, file)
+            showMessage(getString(R.string.player_ai_subtitle_export_success, file.absolutePath))
+        } catch (e: Exception) {
+            showMessage("Export failed: ${e.message}")
+        }
+    }
+
+    private fun resolveCurrentVideoUri(): String? {
+        return activeRequest
+            ?.sources
+            ?.getOrNull(playerManager.currentState().currentIndex.coerceAtLeast(0))
+            ?.uriValue
     }
 }
 
