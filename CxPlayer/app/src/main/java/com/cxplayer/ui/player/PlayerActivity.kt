@@ -1,5 +1,5 @@
 package com.cxplayer.ui.player
-
+import android.graphics.Typeface
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.SharedPreferences
@@ -1446,32 +1446,21 @@ class PlayerActivity : AppCompatActivity() {
     private fun renderAiSubtitleEvent(event: SubtitleEvent, displayMode: SubtitleDisplayMode) {
         runOnUiThread {
             when (event) {
-                is SubtitleEvent.Original -> {
-                    when (displayMode) {
-                        SubtitleDisplayMode.ORIGINAL_ONLY, SubtitleDisplayMode.BOTH -> {
-                            aiSubtitleOriginalText.text = event.text
-                            aiSubtitleOriginalText.visibility = View.VISIBLE
-                        }
-                        SubtitleDisplayMode.TRANSLATION_ONLY -> {
-                            aiSubtitleOriginalText.visibility = View.GONE
-                        }
-                    }
-                }
-                is SubtitleEvent.Translation -> {
-                    when (displayMode) {
-                        SubtitleDisplayMode.TRANSLATION_ONLY, SubtitleDisplayMode.BOTH -> {
-                            aiSubtitleTranslationText.text = event.text
-                            aiSubtitleTranslationText.visibility = View.VISIBLE
-                        }
-                        SubtitleDisplayMode.ORIGINAL_ONLY -> {
-                            aiSubtitleTranslationText.visibility = View.GONE
-                        }
-                    }
-                }
-                is SubtitleEvent.Provisional -> {
-                    // Hiện provisional trên dòng original (italic style)
-                    aiSubtitleOriginalText.text = event.text
-                    aiSubtitleOriginalText.visibility = View.VISIBLE
+                is SubtitleEvent.Snapshot -> {
+                    val showOriginal = displayMode != SubtitleDisplayMode.TRANSLATION_ONLY &&
+                        event.originalText.isNotBlank()
+                    val showTranslation = displayMode != SubtitleDisplayMode.ORIGINAL_ONLY &&
+                        event.translationText.isNotBlank()
+
+                    aiSubtitleOriginalText.text = event.originalText
+                    aiSubtitleOriginalText.visibility = if (showOriginal) View.VISIBLE else View.GONE
+                    aiSubtitleOriginalText.setTypeface(
+                        null,
+                        if (event.isOriginalProvisional) Typeface.ITALIC else Typeface.NORMAL
+                    )
+
+                    aiSubtitleTranslationText.text = event.translationText
+                    aiSubtitleTranslationText.visibility = if (showTranslation) View.VISIBLE else View.GONE
                 }
             }
         }

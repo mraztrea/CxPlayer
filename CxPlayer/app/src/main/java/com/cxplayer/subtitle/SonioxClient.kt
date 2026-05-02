@@ -2,7 +2,6 @@ package com.cxplayer.subtitle
 
 import android.util.Log
 import com.cxplayer.data.model.SonioxConfig
-import com.cxplayer.data.model.SubtitleEvent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +19,16 @@ enum class ConnectionState {
     IDLE, CONNECTING, ACTIVE, ERROR, RECONNECTING, FAILED
 }
 
+internal data class SonioxChunk(
+    val finalizedOriginalText: String = "",
+    val finalizedTranslationText: String = "",
+    val provisionalOriginalText: String = "",
+    val sourceLanguage: String? = null,
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    val hasEndToken: Boolean = false
+)
+
 /**
  * WebSocket client kết nối Soniox STT API.
  * Xử lý: connect, sendAudio, parse response, session management, keepalive, auto-reconnect.
@@ -35,8 +44,8 @@ class SonioxClient(private val scope: CoroutineScope) {
     private var sessionResetJob: Job? = null
     private var lastTranslationContext = StringBuilder()
 
-    private val _subtitleFlow = MutableSharedFlow<SubtitleEvent>(extraBufferCapacity = 64)
-    val subtitleFlow: SharedFlow<SubtitleEvent> = _subtitleFlow
+    private val _chunkFlow = MutableSharedFlow<SonioxChunk>(extraBufferCapacity = 64)
+    internal val chunkFlow: SharedFlow<SonioxChunk> = _chunkFlow
 
     private val _connectionState = MutableStateFlow(ConnectionState.IDLE)
     val connectionState: StateFlow<ConnectionState> = _connectionState
@@ -156,33 +165,86 @@ class SonioxClient(private val scope: CoroutineScope) {
             }
 
             val tokens = json.optJSONArray("tokens") ?: return
+            val finalizedOriginal = StringBuilder()
+            val finalizedTranslation = StringBuilder()
+            val provisionalOriginal = StringBuilder()
+            var sourceLanguage: String? = null
+            var startMs: Long? = null
+            var endMs: Long? = null
+            var hasEndToken = false
+
             for (i in 0 until tokens.length()) {
                 val token = tokens.getJSONObject(i)
                 val tokenText = token.optString("text", "")
                 if (tokenText.isEmpty()) continue
+                if (tokenText == "<end>") {
+                    hasEndToken = true
+                    continue
+                }
 
                 val translationStatus = token.optString("translation_status", "none")
                 val isFinal = token.optBoolean("is_final", false)
-
-                val event = when {
-                    !isFinal -> SubtitleEvent.Provisional(tokenText)
-                    translationStatus == "original" -> SubtitleEvent.Original(tokenText, null)
-                    translationStatus == "translation" -> {
-                        // Lưu context cho phiên tiếp theo
-                        lastTranslationContext.append(tokenText)
-                        if (lastTranslationContext.length > CONTEXT_MAX_CHARS) {
-                            val excess = lastTranslationContext.length - CONTEXT_MAX_CHARS
-                            lastTranslationContext.delete(0, excess)
-                        }
-                        SubtitleEvent.Translation(tokenText)
-                    }
-                    else -> SubtitleEvent.Original(tokenText, null)
+                if (sourceLanguage == null && translationStatus != "translation" && token.has("language")) {
+                    sourceLanguage = token.optString("language")
                 }
-                _subtitleFlow.tryEmit(event)
+                if (!token.isNull("start_ms")) {
+                    val tokenStartMs = token.optLong("start_ms")
+                    if (startMs == null || tokenStartMs < startMs) {
+                        startMs = tokenStartMs
+                    }
+                }
+                if (!token.isNull("end_ms")) {
+                    val tokenEndMs = token.optLong("end_ms")
+                    if (endMs == null || tokenEndMs > endMs) {
+                        endMs = tokenEndMs
+                    }
+                }
+
+                when {
+                    !isFinal && translationStatus != "translation" -> provisionalOriginal.append(tokenText)
+                    translationStatus == "translation" && isFinal -> finalizedTranslation.append(tokenText)
+                    translationStatus == "original" && isFinal -> finalizedOriginal.append(tokenText)
+                    translationStatus == "none" && isFinal -> finalizedOriginal.append(tokenText)
+                }
+            }
+
+            if (finalizedTranslation.isNotEmpty()) {
+                lastTranslationContext.append(finalizedTranslation)
+                if (lastTranslationContext.length > CONTEXT_MAX_CHARS) {
+                    val excess = lastTranslationContext.length - CONTEXT_MAX_CHARS
+                    lastTranslationContext.delete(0, excess)
+                }
+            }
+
+            val chunk = SonioxChunk(
+                finalizedOriginalText = finalizedOriginal.toString(),
+                finalizedTranslationText = finalizedTranslation.toString(),
+                provisionalOriginalText = provisionalOriginal.toString(),
+                sourceLanguage = sourceLanguage,
+                startMs = startMs,
+                endMs = endMs,
+                hasEndToken = hasEndToken
+            )
+            if (chunk.finalizedOriginalText.isNotEmpty() ||
+                chunk.finalizedTranslationText.isNotEmpty() ||
+                chunk.provisionalOriginalText.isNotEmpty() ||
+                chunk.hasEndToken
+            ) {
+                Log.d(
+                    TAG,
+                    "chunk: finalOriginal=\"${previewText(chunk.finalizedOriginalText)}\", " +
+                        "finalTranslation=\"${previewText(chunk.finalizedTranslationText)}\", " +
+                        "provisional=\"${previewText(chunk.provisionalOriginalText)}\", hasEnd=${chunk.hasEndToken}"
+                )
+                _chunkFlow.tryEmit(chunk)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Parse error: ${e.message}")
         }
+    }
+
+    private fun previewText(text: String): String {
+        return text.replace('\n', ' ').trim().take(80)
     }
 
     private fun startKeepalive() {
