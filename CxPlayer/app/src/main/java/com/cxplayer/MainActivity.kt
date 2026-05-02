@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FIX]: CxAudioProcessor DirectByteBuffer self-put crash khi phát video - 2026-05-01",
+        text = "[FIX]: Merge develop (GUI redesign) vào AI subtitle branch - 2026-05-02",
         modifier = modifier
     )
 }
