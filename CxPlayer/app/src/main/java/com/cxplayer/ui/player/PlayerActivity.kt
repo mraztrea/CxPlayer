@@ -121,7 +121,6 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var shuffleButton: ImageButton
     private lateinit var repeatButton: ImageButton
     private lateinit var trackSelectorButton: ImageButton
-    private lateinit var settingsButton: ImageButton
     private lateinit var aiSubtitleButton: ImageButton
     private lateinit var aiSubtitleOverlay: LinearLayout
     private lateinit var aiSubtitleOriginalText: TextView
@@ -465,7 +464,6 @@ class PlayerActivity : AppCompatActivity() {
         shuffleButton = binding.playerShuffleButton
         repeatButton = binding.playerRepeatButton
         trackSelectorButton = binding.playerTrackSelectorButton
-        settingsButton = binding.playerSettingsButton
         aiSubtitleButton = binding.playerAiSubtitleButton
         aiSubtitleOverlay = binding.aiSubtitleOverlay
         aiSubtitleOriginalText = binding.aiSubtitleOriginalText

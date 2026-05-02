@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FIX]: AI subtitle reconnect loop + audio_format Soniox - 2026-05-02 22:39",
+        text = "[FIX]: Gỡ binding settings button lỗi sau merge - 2026-05-02 22:48",
         modifier = modifier
     )
 }
