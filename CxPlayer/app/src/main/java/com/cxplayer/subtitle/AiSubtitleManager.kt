@@ -28,10 +28,16 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
     private var activeProvisionalOriginalText = ""
     private var committedOriginalText = ""
     private var committedTranslationText = ""
-    private var entryStartMs = 0L
+    private var committedStartMs: Long? = null
+    private var committedEndMs: Long? = null
+    private var entryStartMs: Long? = null
+    private var entryEndMs: Long? = null
     private var entryIndex = 0
     private var collectJob: Job? = null
     private var lastFinalEndMs: Long? = null
+    private var lastPlaybackPositionMs = 0L
+    private var pendingSnapshot: SubtitleEvent.Snapshot? = null
+    private var lastEmittedSnapshot: SubtitleEvent.Snapshot? = null
 
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive
@@ -76,29 +82,33 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
         }
     }
 
+    fun updatePlaybackPosition(positionMs: Long) {
+        lastPlaybackPositionMs = positionMs.coerceAtLeast(0L)
+        emitPendingSnapshotIfDue()
+    }
+
     fun setDisplayMode(mode: SubtitleDisplayMode) {
         _displayMode.value = mode
     }
 
-    private fun handleChunk(chunk: SonioxChunk) {
+    internal fun handleChunk(chunk: SonioxChunk) {
         if (shouldFlushBeforeAppend(chunk)) {
             finalizeCurrentEntry()
         }
 
+        ensureEntryTimingStarted(chunk)
+
         if (chunk.finalizedOriginalText.isNotEmpty()) {
-            if (activeOriginalText.isEmpty() && activeTranslationText.isEmpty()) {
-                entryStartMs = System.currentTimeMillis()
-            }
             activeOriginalText.append(chunk.finalizedOriginalText)
         }
         if (chunk.finalizedTranslationText.isNotEmpty()) {
-            if (activeOriginalText.isEmpty() && activeTranslationText.isEmpty()) {
-                entryStartMs = System.currentTimeMillis()
-            }
             activeTranslationText.append(chunk.finalizedTranslationText)
         }
         if (chunk.endMs != null) {
             lastFinalEndMs = chunk.endMs
+            if (entryStartMs != null || chunk.provisionalOriginalText.isNotEmpty()) {
+                entryEndMs = chunk.endMs
+            }
         }
         activeProvisionalOriginalText = chunk.provisionalOriginalText
 
@@ -129,6 +139,17 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
             normalizedTranslation.length >= MAX_SENTENCE_CHARS
     }
 
+    private fun ensureEntryTimingStarted(chunk: SonioxChunk) {
+        if (entryStartMs != null) return
+        if (chunk.finalizedOriginalText.isEmpty() &&
+            chunk.finalizedTranslationText.isEmpty() &&
+            chunk.provisionalOriginalText.isEmpty()
+        ) {
+            return
+        }
+        entryStartMs = chunk.startMs ?: chunk.endMs ?: lastFinalEndMs
+    }
+
     private fun finalizeCurrentEntry() {
         val originalText = normalizeSubtitleText(activeOriginalText.toString())
         val translationText = normalizeSubtitleText(activeTranslationText.toString())
@@ -140,17 +161,21 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
             }
         }
         if (text.isNotEmpty()) {
+            val resolvedStartMs = entryStartMs ?: entryEndMs ?: lastFinalEndMs ?: 0L
+            val resolvedEndMs = entryEndMs ?: lastFinalEndMs ?: resolvedStartMs
             entryIndex++
             collectedEntries.add(
                 SrtEntry(
                     index = entryIndex,
-                    startMs = entryStartMs,
-                    endMs = System.currentTimeMillis(),
+                    startMs = resolvedStartMs,
+                    endMs = resolvedEndMs,
                     text = text
                 )
             )
             committedOriginalText = originalText
             committedTranslationText = translationText
+            committedStartMs = resolvedStartMs
+            committedEndMs = resolvedEndMs
         }
         resetSentenceState(clearCommitted = false)
     }
@@ -173,24 +198,62 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
         } else {
             committedTranslationText
         }
+        val startPositionMs = if (hasActiveSentence) {
+            entryStartMs
+        } else {
+            committedStartMs
+        }
+        val endPositionMs = if (hasActiveSentence) {
+            entryEndMs ?: lastFinalEndMs
+        } else {
+            committedEndMs
+        }
 
-        _subtitleFlow.tryEmit(
-            SubtitleEvent.Snapshot(
-                originalText = originalText,
-                translationText = translationText,
-                isOriginalProvisional = normalizedProvisional.isNotEmpty()
-            )
+        pendingSnapshot = SubtitleEvent.Snapshot(
+            originalText = originalText,
+            translationText = translationText,
+            isOriginalProvisional = normalizedProvisional.isNotEmpty(),
+            startPositionMs = startPositionMs,
+            endPositionMs = endPositionMs
         )
+        emitPendingSnapshotIfDue()
+    }
+
+    private fun emitPendingSnapshotIfDue() {
+        val snapshot = pendingSnapshot ?: return
+        val startPositionMs = snapshot.startPositionMs
+        if (startPositionMs != null && lastPlaybackPositionMs < startPositionMs) {
+            return
+        }
+        if (snapshot == lastEmittedSnapshot) {
+            return
+        }
+        val displayMode = displayMode.value
+        val previousSnapshot = lastEmittedSnapshot
+        if (!snapshot.hasVisibleContent(displayMode) &&
+            previousSnapshot != null &&
+            previousSnapshot.hasVisibleContent(displayMode)
+        ) {
+            return
+        }
+        lastEmittedSnapshot = snapshot
+        _subtitleFlow.tryEmit(snapshot)
     }
 
     private fun resetSentenceState(clearCommitted: Boolean) {
         activeOriginalText.clear()
         activeTranslationText.clear()
         activeProvisionalOriginalText = ""
+        entryStartMs = null
+        entryEndMs = null
         lastFinalEndMs = null
         if (clearCommitted) {
             committedOriginalText = ""
             committedTranslationText = ""
+            committedStartMs = null
+            committedEndMs = null
+            pendingSnapshot = null
+            lastEmittedSnapshot = null
         }
     }
 
@@ -208,5 +271,13 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
             trimmed.endsWith("。") ||
             trimmed.endsWith("！") ||
             trimmed.endsWith("？")
+    }
+
+    private fun SubtitleEvent.Snapshot.hasVisibleContent(mode: SubtitleDisplayMode): Boolean {
+        return when (mode) {
+            SubtitleDisplayMode.ORIGINAL_ONLY -> originalText.isNotBlank()
+            SubtitleDisplayMode.TRANSLATION_ONLY -> translationText.isNotBlank()
+            SubtitleDisplayMode.BOTH -> originalText.isNotBlank() || translationText.isNotBlank()
+        }
     }
 }

@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FIX]: Gom AI subtitle theo câu thay vì từng token - 2026-05-02 23:09",
+        text = "[FIX]: Giu phu de AI dich khong bi mat som khi cau moi chua hien thi - 2026-05-03 00:19",
         modifier = modifier
     )
 }

@@ -69,6 +69,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.File
@@ -93,6 +94,7 @@ private val SPEED_VALUES = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2
 private const val DEFAULT_SPEED_INDEX = 3
 private const val CHROME_AUTO_HIDE_DELAY_MS = 5000L
 private const val CHROME_LOCKED_AUTO_HIDE_DELAY_MS = 3000L
+private const val AI_SUBTITLE_SYNC_INTERVAL_MS = 50L
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -173,6 +175,7 @@ class PlayerActivity : AppCompatActivity() {
     private var aiSubtitleManager: AiSubtitleManager? = null
     private var aiSubtitleCollectJob: Job? = null
     private var aiConnectionCollectJob: Job? = null
+    private var aiPlaybackSyncJob: Job? = null
     private val subtitleCacheManager by lazy(LazyThreadSafetyMode.NONE) { SubtitleCacheManager(this) }
     private val prefs: SharedPreferences by lazy {
         getSharedPreferences("cxplayer_prefs", MODE_PRIVATE)
@@ -1386,6 +1389,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         manager.start(config)
+        manager.updatePlaybackPosition(playerManager.currentState().currentPositionMs)
         showMessage(R.string.player_ai_subtitle_on)
         aiSubtitleButton.alpha = 1.0f
         aiSubtitleOverlay.visibility = View.VISIBLE
@@ -1403,6 +1407,13 @@ class PlayerActivity : AppCompatActivity() {
                 updateAiConnectionStatus(state)
             }
         }
+
+        aiPlaybackSyncJob = aiScope.launch {
+            while (true) {
+                manager.updatePlaybackPosition(playerManager.currentState().currentPositionMs)
+                delay(AI_SUBTITLE_SYNC_INTERVAL_MS)
+            }
+        }
     }
 
     private fun stopAiSubtitle() {
@@ -1417,6 +1428,8 @@ class PlayerActivity : AppCompatActivity() {
 
         aiSubtitleCollectJob?.cancel()
         aiConnectionCollectJob?.cancel()
+        aiPlaybackSyncJob?.cancel()
+        aiPlaybackSyncJob = null
         aiSubtitleManager = null
         aiSubtitleButton.alpha = 0.7f
         aiSubtitleOverlay.visibility = View.GONE
