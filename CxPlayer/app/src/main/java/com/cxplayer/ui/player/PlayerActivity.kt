@@ -3,6 +3,7 @@ package com.cxplayer.ui.player
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -11,20 +12,29 @@ import android.os.Environment
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
+import androidx.media3.common.C
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.cxplayer.R
 import com.cxplayer.databinding.ActivityPlayerBinding
@@ -73,8 +83,16 @@ private const val STATE_PLAYBACK_POSITION_MS = "state_playback_position_ms"
 private const val STATE_PLAY_WHEN_READY = "state_play_when_ready"
 private const val STATE_SUBTITLE_DISABLED_BY_USER = "state_subtitle_disabled_by_user"
 private const val STATE_SUBTITLE_STYLE_PRESET_INDEX = "state_subtitle_style_preset_index"
+private const val STATE_SCREEN_LOCKED = "state_screen_locked"
+private const val STATE_RESIZE_MODE = "state_resize_mode"
+private const val STATE_AUTOPLAY_ENABLED = "state_autoplay_enabled"
 private const val ACTION_OPEN_INTERNAL_SMB = "com.cxplayer.action.OPEN_INTERNAL_SMB"
 private const val PREF_SONIOX_API_KEY = "pref_soniox_api_key"
+
+private val SPEED_VALUES = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+private const val DEFAULT_SPEED_INDEX = 3
+private const val CHROME_AUTO_HIDE_DELAY_MS = 5000L
+private const val CHROME_LOCKED_AUTO_HIDE_DELAY_MS = 3000L
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -103,12 +121,20 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var shuffleButton: ImageButton
     private lateinit var repeatButton: ImageButton
     private lateinit var trackSelectorButton: ImageButton
-    private lateinit var settingsButton: ImageButton
     private lateinit var aiSubtitleButton: ImageButton
     private lateinit var aiSubtitleOverlay: LinearLayout
     private lateinit var aiSubtitleOriginalText: TextView
     private lateinit var aiSubtitleTranslationText: TextView
     private lateinit var aiSubtitleStatusText: TextView
+    private lateinit var functionRow: HorizontalScrollView
+    private lateinit var lockButton: ImageButton
+    private lateinit var unlockButton: ImageButton
+    private lateinit var subtitleButton: ImageButton
+    private lateinit var resizeButton: ImageButton
+    private lateinit var rotateButton: ImageButton
+    private lateinit var audioTrackButton: ImageButton
+    private lateinit var speedSpinner: Spinner
+    private lateinit var autoPlayButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
     private val networkBrowserDialog by lazy(LazyThreadSafetyMode.NONE) { NetworkBrowserDialog(this) }
     private val trackSelector by lazy(LazyThreadSafetyMode.NONE) { TrackSelector(this) }
@@ -128,12 +154,19 @@ class PlayerActivity : AppCompatActivity() {
     private var currentWindowBrightness: Float = 0.5f
     private var currentZoomScale: Float = 1f
     private var currentGestureOverlayState: GestureOverlayState? = null
+    private var isScreenLocked: Boolean = false
+    private var currentResizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT
+    private var isAutoPlayEnabled: Boolean = true
+    private var currentSpeedIndex: Int = DEFAULT_SPEED_INDEX
+    private var isChromeVisible: Boolean = true
+    private val autoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val hideGestureOverlayRunnable = Runnable {
         currentGestureOverlayState = null
         if (::gestureOverlay.isInitialized) {
             gestureOverlay.visibility = View.GONE
         }
     }
+    private val hideChromeRunnable = Runnable { hideChrome() }
 
     // AI Subtitle
     private val aiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -191,6 +224,9 @@ class PlayerActivity : AppCompatActivity() {
         }
         outState.putBoolean(STATE_SUBTITLE_DISABLED_BY_USER, subtitleDisabledByUser)
         outState.putInt(STATE_SUBTITLE_STYLE_PRESET_INDEX, subtitleStylePresetIndex)
+        outState.putBoolean(STATE_SCREEN_LOCKED, isScreenLocked)
+        outState.putInt(STATE_RESIZE_MODE, currentResizeMode)
+        outState.putBoolean(STATE_AUTOPLAY_ENABLED, isAutoPlayEnabled)
         super.onSaveInstanceState(outState)
     }
 
@@ -218,6 +254,7 @@ class PlayerActivity : AppCompatActivity() {
         aiSubtitleCollectJob?.cancel()
         aiConnectionCollectJob?.cancel()
         aiScope.cancel()
+        autoHideHandler.removeCallbacksAndMessages(null)
         subtitleManager = null
         playerManager.release()
         super.onDestroy()
@@ -226,11 +263,13 @@ class PlayerActivity : AppCompatActivity() {
     fun playPlayback() {
         playerManager.play()
         syncPlayerState()
+        scheduleAutoHideChrome()
     }
 
     fun pausePlayback() {
         playerManager.pause()
         syncPlayerState()
+        cancelAutoHideChrome()
     }
 
     fun seekToPosition(positionMs: Long) {
@@ -329,7 +368,8 @@ class PlayerActivity : AppCompatActivity() {
             ::bottomChrome.isInitialized &&
             ::topRegion.isInitialized &&
             ::timelineRow.isInitialized &&
-            ::transportRow.isInitialized
+            ::transportRow.isInitialized &&
+            ::functionRow.isInitialized
 
     private fun updatePendingLaunch(intent: Intent?) {
         when (val outcome = PlaybackRequestParser.fromIntent(intent, contentResolver)) {
@@ -375,6 +415,7 @@ class PlayerActivity : AppCompatActivity() {
         pendingSnapshot = null
         syncPlayerState()
         updateTopChrome()
+        scheduleAutoHideChrome()
     }
 
     private fun captureSnapshot() {
@@ -384,6 +425,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun restoreSnapshot(savedInstanceState: Bundle?): PlaybackSnapshot? {
         subtitleDisabledByUser = savedInstanceState?.getBoolean(STATE_SUBTITLE_DISABLED_BY_USER, false) ?: false
         subtitleStylePresetIndex = savedInstanceState?.getInt(STATE_SUBTITLE_STYLE_PRESET_INDEX, 0) ?: 0
+        isScreenLocked = savedInstanceState?.getBoolean(STATE_SCREEN_LOCKED, false) ?: false
+        currentResizeMode = savedInstanceState?.getInt(STATE_RESIZE_MODE, AspectRatioFrameLayout.RESIZE_MODE_FIT) ?: AspectRatioFrameLayout.RESIZE_MODE_FIT
+        isAutoPlayEnabled = savedInstanceState?.getBoolean(STATE_AUTOPLAY_ENABLED, true) ?: true
         if (savedInstanceState == null || !savedInstanceState.containsKey(STATE_PLAYBACK_INDEX)) {
             return null
         }
@@ -420,12 +464,20 @@ class PlayerActivity : AppCompatActivity() {
         shuffleButton = binding.playerShuffleButton
         repeatButton = binding.playerRepeatButton
         trackSelectorButton = binding.playerTrackSelectorButton
-        settingsButton = binding.playerSettingsButton
         aiSubtitleButton = binding.playerAiSubtitleButton
         aiSubtitleOverlay = binding.aiSubtitleOverlay
         aiSubtitleOriginalText = binding.aiSubtitleOriginalText
         aiSubtitleTranslationText = binding.aiSubtitleTranslationText
         aiSubtitleStatusText = binding.aiSubtitleStatusText
+        functionRow = binding.playerFunctionRow
+        lockButton = binding.playerLockButton
+        unlockButton = binding.playerUnlockButton
+        subtitleButton = binding.playerSubtitleButton
+        resizeButton = binding.playerResizeButton
+        rotateButton = binding.playerRotateButton
+        audioTrackButton = binding.playerAudioTrackButton
+        speedSpinner = binding.playerSpeedSpinner
+        autoPlayButton = binding.playerAutoPlayButton
     }
 
     private fun initializeTopChrome() {
@@ -433,7 +485,7 @@ class PlayerActivity : AppCompatActivity() {
         backButton.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
         }
-        overflowButton.setOnClickListener { cycleSubtitleSource() }
+        overflowButton.setOnClickListener { showOverflowMenu() }
         aiSubtitleButton.setOnClickListener { toggleAiSubtitle() }
         aiSubtitleButton.setOnLongClickListener { showDisplayModeDialog(); true }
         overflowButton.setOnLongClickListener { showNetworkBrowser() }
@@ -487,11 +539,6 @@ class PlayerActivity : AppCompatActivity() {
             syncPlayerState()
             updateTopChrome()
         }
-        shuffleButton.setOnClickListener {
-            val enabled = playerManager.toggleShuffle()
-            showMessage(if (enabled) R.string.player_shuffle_on_feedback else R.string.player_shuffle_off_feedback)
-            syncPlayerState()
-        }
         repeatButton.setOnClickListener {
             val mode = playerManager.cycleRepeatMode()
             val feedbackResId = when (mode) {
@@ -503,17 +550,200 @@ class PlayerActivity : AppCompatActivity() {
             syncPlayerState()
         }
         trackSelectorButton.setOnClickListener { showTrackSelector() }
-        settingsButton.setOnClickListener { launchSubtitlePicker() }
-        settingsButton.setOnLongClickListener {
-            val fontSize = advanceSubtitleStyleForTesting()
-            if (fontSize > 0) {
-                showMessage(getString(R.string.player_subtitle_feedback_style, fontSize))
-                true
-            } else {
-                false
+        initializeFunctionRow()
+        updateBottomChrome()
+    }
+
+    private fun initializeFunctionRow() {
+        lockButton.setOnClickListener { setScreenLocked(true) }
+        unlockButton.setOnClickListener { setScreenLocked(false) }
+        subtitleButton.setOnClickListener {
+            val manager = subtitleManager
+            if (manager == null) {
+                showMessage(R.string.player_no_subtitle_message)
+                return@setOnClickListener
+            }
+            val sources = manager.availableSubtitleSources()
+            val activeSources = sources.filter { it.kind != SubtitleSourceKind.Off }
+            when {
+                activeSources.isEmpty() -> showMessage(R.string.player_no_subtitle_message)
+                activeSources.size == 1 -> cycleSubtitleSource()
+                else -> showTrackSelector()
             }
         }
-        updateBottomChrome()
+        subtitleButton.setOnLongClickListener { launchSubtitlePicker(); true }
+        resizeButton.setOnClickListener { cycleResizeMode() }
+        rotateButton.setOnClickListener { toggleRotation() }
+        audioTrackButton.setOnClickListener { showTrackSelector() }
+        shuffleButton.setOnClickListener {
+            val enabled = playerManager.toggleShuffle()
+            showMessage(if (enabled) R.string.player_shuffle_on_feedback else R.string.player_shuffle_off_feedback)
+            syncPlayerState()
+        }
+        autoPlayButton.setOnClickListener {
+            isAutoPlayEnabled = !isAutoPlayEnabled
+            updateAutoPlayButton()
+            showMessage(if (isAutoPlayEnabled) R.string.player_autoplay_on_feedback else R.string.player_autoplay_off_feedback)
+        }
+        setupSpeedSpinner()
+        updateAutoPlayButton()
+    }
+
+    private fun setupSpeedSpinner() {
+        val speedLabels = resources.getStringArray(R.array.player_speed_options)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, speedLabels)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        speedSpinner.adapter = adapter
+        speedSpinner.setSelection(currentSpeedIndex)
+        speedSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                currentSpeedIndex = position
+                val speed = SPEED_VALUES.getOrElse(position) { 1.0f }
+                playerManager.setPlaybackSpeed(speed)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
+    private fun setScreenLocked(locked: Boolean) {
+        isScreenLocked = locked
+        if (::gestureController.isInitialized) {
+            gestureController.isLocked = locked
+        }
+        if (locked) {
+            topChrome.visibility = View.GONE
+            bottomChrome.visibility = View.GONE
+            isChromeVisible = false
+            unlockButton.visibility = View.VISIBLE
+            applyImmersiveMode()
+            autoHideHandler.postDelayed({
+                if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
+                    unlockButton.visibility = View.GONE
+                }
+            }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
+        } else {
+            unlockButton.visibility = View.GONE
+            showChrome()
+        }
+    }
+
+    private fun showOverflowMenu() {
+        val popup = PopupMenu(this, overflowButton)
+        popup.menuInflater.inflate(R.menu.player_overflow, popup.menu)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_player_settings -> {
+                    launchSubtitlePicker()
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun cycleResizeMode() {
+        currentResizeMode = when (currentResizeMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+        playerView.resizeMode = currentResizeMode
+        val iconRes = when (currentResizeMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> R.drawable.ic_player_resize_fit
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> R.drawable.ic_player_resize_fill
+            else -> R.drawable.ic_player_resize_zoom
+        }
+        resizeButton.setImageResource(iconRes)
+        val labelRes = when (currentResizeMode) {
+            AspectRatioFrameLayout.RESIZE_MODE_FIT -> R.string.player_resize_fit_label
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> R.string.player_resize_fill_label
+            else -> R.string.player_resize_zoom_label
+        }
+        showMessage(labelRes)
+    }
+
+    private fun toggleRotation() {
+        requestedOrientation = when (requestedOrientation) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            else -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+    }
+
+    private fun updateAutoPlayButton() {
+        val iconRes = if (isAutoPlayEnabled) R.drawable.ic_player_autoplay else R.drawable.ic_player_autoplay_off
+        autoPlayButton.setImageResource(iconRes)
+        autoPlayButton.alpha = if (isAutoPlayEnabled) 1f else 0.5f
+    }
+
+    private fun toggleChromeVisibility() {
+        if (isChromeVisible) {
+            hideChrome()
+        } else {
+            showChrome()
+        }
+    }
+
+    private fun showChrome() {
+        if (!hasChromeSkeleton()) return
+        isChromeVisible = true
+        topChrome.visibility = View.VISIBLE
+        bottomChrome.visibility = View.VISIBLE
+        exitImmersiveMode()
+        scheduleAutoHideChrome()
+    }
+
+    private fun hideChrome() {
+        if (!hasChromeSkeleton()) return
+        isChromeVisible = false
+        topChrome.visibility = View.GONE
+        bottomChrome.visibility = View.GONE
+        cancelAutoHideChrome()
+        applyImmersiveMode()
+    }
+
+    private fun scheduleAutoHideChrome() {
+        cancelAutoHideChrome()
+        val state = playerManager.currentState()
+        if (state.hasActiveSession && state.playWhenReady) {
+            val delay = if (isScreenLocked) CHROME_LOCKED_AUTO_HIDE_DELAY_MS else CHROME_AUTO_HIDE_DELAY_MS
+            autoHideHandler.postDelayed(hideChromeRunnable, delay)
+        }
+    }
+
+    private fun cancelAutoHideChrome() {
+        autoHideHandler.removeCallbacks(hideChromeRunnable)
+    }
+
+    private fun toggleUnlockButtonVisibility() {
+        if (!isScreenLocked) return
+        val isVisible = unlockButton.visibility == View.VISIBLE
+        if (isVisible) {
+            unlockButton.visibility = View.GONE
+            applyImmersiveMode()
+        } else {
+            unlockButton.visibility = View.VISIBLE
+            exitImmersiveMode()
+            autoHideHandler.removeCallbacks(hideChromeRunnable)
+            autoHideHandler.postDelayed({
+                if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
+                    unlockButton.visibility = View.GONE
+                    applyImmersiveMode()
+                }
+            }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
+        }
+    }
+
+    private fun applyImmersiveMode() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    private fun exitImmersiveMode() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.show(WindowInsetsCompat.Type.systemBars())
     }
 
     private fun refreshSubtitleManager() {
@@ -826,7 +1056,9 @@ class PlayerActivity : AppCompatActivity() {
             onTogglePlayPause = ::togglePlayback,
             onFastForward = ::startTemporaryFastForward,
             onFastForwardEnd = ::endTemporaryFastForward,
-            onZoom = ::applyZoomFactor
+            onZoom = ::applyZoomFactor,
+            onSingleTapConfirmed = ::toggleChromeVisibility,
+            onSingleTapWhileLocked = ::toggleUnlockButtonVisibility
         )
     }
 
