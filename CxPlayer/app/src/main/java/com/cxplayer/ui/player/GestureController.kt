@@ -102,8 +102,11 @@ class GestureController(
         playerView.setOnTouchListener(this)
     }
 
+    var isLocked: Boolean = false
+
     override fun onTouch(view: View?, event: MotionEvent?): Boolean {
         val motionEvent = event ?: return false
+        if (isLocked) return false
         when (motionEvent.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 sessionController.onTouchDown(

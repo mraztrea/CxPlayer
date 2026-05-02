@@ -155,6 +155,101 @@
                 android:textSize="@dimen/player_time_text_size" />
         </LinearLayout>
 
+        <!-- Function Row -->
+        <HorizontalScrollView
+            android:id="@+id/playerFunctionRow"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/player_function_row_height"
+            android:layout_marginTop="@dimen/player_function_row_margin_top"
+            android:scrollbars="none"
+            android:fadingEdgeLength="16dp"
+            android:requiresFadingEdge="horizontal">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/playerLockButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_lock_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_lock" />
+
+                <ImageButton
+                    android:id="@+id/playerSubtitleButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_subtitle_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_subtitle" />
+
+                <ImageButton
+                    android:id="@+id/playerResizeButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_resize_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_resize_fit" />
+
+                <ImageButton
+                    android:id="@+id/playerRotateButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_rotate_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_rotate" />
+
+                <ImageButton
+                    android:id="@+id/playerAudioTrackButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_audio_track_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_track_selector" />
+
+                <Spinner
+                    android:id="@+id/playerSpeedSpinner"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:contentDescription="@string/player_speed_content_description" />
+
+                <ImageButton
+                    android:id="@+id/playerShuffleButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:layout_marginEnd="@dimen/player_function_button_spacing"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_shuffle_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_shuffle" />
+
+                <ImageButton
+                    android:id="@+id/playerAutoPlayButton"
+                    android:layout_width="@dimen/player_function_button_size"
+                    android:layout_height="@dimen/player_function_button_size"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/player_autoplay_content_description"
+                    android:padding="@dimen/player_function_button_padding"
+                    app:srcCompat="@drawable/ic_player_autoplay" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Transport Row -->
         <LinearLayout
             android:id="@+id/playerTransportRow"
             android:layout_width="match_parent"
@@ -163,15 +258,6 @@
             android:gravity="center"
             android:minHeight="@dimen/player_transport_row_min_height"
             android:orientation="horizontal">
-
-            <ImageButton
-                android:id="@+id/playerShuffleButton"
-                android:layout_width="@dimen/player_transport_button_size"
-                android:layout_height="@dimen/player_transport_button_size"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/player_shuffle_content_description"
-                android:padding="@dimen/player_transport_button_padding"
-                app:srcCompat="@drawable/ic_player_shuffle" />
 
             <ImageButton
                 android:id="@+id/playerSkipPreviousButton"
@@ -242,16 +328,18 @@
                 android:contentDescription="@string/player_track_selector_content_description"
                 android:padding="@dimen/player_transport_button_padding"
                 app:srcCompat="@drawable/ic_player_track_selector" />
-
-            <ImageButton
-                android:id="@+id/playerSettingsButton"
-                android:layout_width="@dimen/player_transport_button_size"
-                android:layout_height="@dimen/player_transport_button_size"
-                android:layout_marginStart="@dimen/player_transport_secondary_spacing"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/player_settings_content_description"
-                android:padding="@dimen/player_transport_button_padding"
-                app:srcCompat="@drawable/ic_player_settings" />
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Unlock button (visible only in locked state) -->
+    <ImageButton
+        android:id="@+id/playerUnlockButton"
+        android:layout_width="@dimen/player_transport_primary_button_size"
+        android:layout_height="@dimen/player_transport_primary_button_size"
+        android:layout_gravity="center"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/player_unlock_content_description"
+        android:padding="@dimen/player_transport_primary_button_padding"
+        android:visibility="gone"
+        app:srcCompat="@drawable/ic_player_unlock" />
 </FrameLayout>

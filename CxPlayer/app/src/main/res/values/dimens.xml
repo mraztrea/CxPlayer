@@ -27,4 +27,11 @@
     <dimen name="player_gesture_overlay_spacing">6dp</dimen>
     <dimen name="player_gesture_overlay_cue_text_size">13sp</dimen>
     <dimen name="player_gesture_overlay_value_text_size">22sp</dimen>
+
+    <!-- Function Row -->
+    <dimen name="player_function_row_height">48dp</dimen>
+    <dimen name="player_function_row_margin_top">4dp</dimen>
+    <dimen name="player_function_button_size">40dp</dimen>
+    <dimen name="player_function_button_padding">8dp</dimen>
+    <dimen name="player_function_button_spacing">4dp</dimen>
 </resources>
