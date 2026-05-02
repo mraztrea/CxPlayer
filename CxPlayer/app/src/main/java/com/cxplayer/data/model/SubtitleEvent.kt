@@ -7,6 +7,8 @@ sealed class SubtitleEvent {
     data class Snapshot(
         val originalText: String,
         val translationText: String,
-        val isOriginalProvisional: Boolean
+        val isOriginalProvisional: Boolean,
+        val startPositionMs: Long?,
+        val endPositionMs: Long?
     ) : SubtitleEvent()
 }
