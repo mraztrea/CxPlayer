@@ -228,6 +228,14 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
         if (snapshot == lastEmittedSnapshot) {
             return
         }
+        val displayMode = displayMode.value
+        val previousSnapshot = lastEmittedSnapshot
+        if (!snapshot.hasVisibleContent(displayMode) &&
+            previousSnapshot != null &&
+            previousSnapshot.hasVisibleContent(displayMode)
+        ) {
+            return
+        }
         lastEmittedSnapshot = snapshot
         _subtitleFlow.tryEmit(snapshot)
     }
@@ -263,5 +271,13 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
             trimmed.endsWith("。") ||
             trimmed.endsWith("！") ||
             trimmed.endsWith("？")
+    }
+
+    private fun SubtitleEvent.Snapshot.hasVisibleContent(mode: SubtitleDisplayMode): Boolean {
+        return when (mode) {
+            SubtitleDisplayMode.ORIGINAL_ONLY -> originalText.isNotBlank()
+            SubtitleDisplayMode.TRANSLATION_ONLY -> translationText.isNotBlank()
+            SubtitleDisplayMode.BOTH -> originalText.isNotBlank() || translationText.isNotBlank()
+        }
     }
 }
