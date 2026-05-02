@@ -25,7 +25,9 @@ class GestureController(
     private val onTogglePlayPause: () -> Unit,
     private val onFastForward: (speed: Float) -> Unit,
     private val onFastForwardEnd: () -> Unit,
-    private val onZoom: (scaleFactor: Float) -> Unit
+    private val onZoom: (scaleFactor: Float) -> Unit,
+    private val onSingleTapConfirmed: () -> Unit = {},
+    private val onSingleTapWhileLocked: () -> Unit = {}
 ) : View.OnTouchListener {
     private val sessionController = GestureSessionController(
         sink = object : GestureCallbackSink {
@@ -62,6 +64,11 @@ class GestureController(
         playerView.context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(event: MotionEvent): Boolean = true
+
+            override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                this@GestureController.onSingleTapConfirmed()
+                return true
+            }
 
             override fun onScroll(
                 firstDown: MotionEvent?,
@@ -106,7 +113,13 @@ class GestureController(
 
     override fun onTouch(view: View?, event: MotionEvent?): Boolean {
         val motionEvent = event ?: return false
-        if (isLocked) return false
+        if (isLocked) {
+            // Khi locked, chỉ xử lý single tap để toggle unlock button
+            if (motionEvent.actionMasked == MotionEvent.ACTION_UP) {
+                onSingleTapWhileLocked()
+            }
+            return true
+        }
         when (motionEvent.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 sessionController.onTouchDown(

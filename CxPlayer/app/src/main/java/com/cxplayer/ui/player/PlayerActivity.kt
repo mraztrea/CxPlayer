@@ -23,7 +23,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.media3.common.C
@@ -68,6 +70,8 @@ private const val ACTION_OPEN_INTERNAL_SMB = "com.cxplayer.action.OPEN_INTERNAL_
 
 private val SPEED_VALUES = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 private const val DEFAULT_SPEED_INDEX = 3
+private const val CHROME_AUTO_HIDE_DELAY_MS = 5000L
+private const val CHROME_LOCKED_AUTO_HIDE_DELAY_MS = 3000L
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -128,12 +132,15 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT
     private var isAutoPlayEnabled: Boolean = true
     private var currentSpeedIndex: Int = DEFAULT_SPEED_INDEX
+    private var isChromeVisible: Boolean = true
+    private val autoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val hideGestureOverlayRunnable = Runnable {
         currentGestureOverlayState = null
         if (::gestureOverlay.isInitialized) {
             gestureOverlay.visibility = View.GONE
         }
     }
+    private val hideChromeRunnable = Runnable { hideChrome() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -206,6 +213,7 @@ class PlayerActivity : AppCompatActivity() {
         if (::gestureOverlay.isInitialized) {
             gestureOverlay.removeCallbacks(hideGestureOverlayRunnable)
         }
+        autoHideHandler.removeCallbacksAndMessages(null)
         subtitleManager = null
         playerManager.release()
         super.onDestroy()
@@ -214,11 +222,13 @@ class PlayerActivity : AppCompatActivity() {
     fun playPlayback() {
         playerManager.play()
         syncPlayerState()
+        scheduleAutoHideChrome()
     }
 
     fun pausePlayback() {
         playerManager.pause()
         syncPlayerState()
+        cancelAutoHideChrome()
     }
 
     fun seekToPosition(positionMs: Long) {
@@ -364,6 +374,7 @@ class PlayerActivity : AppCompatActivity() {
         pendingSnapshot = null
         syncPlayerState()
         updateTopChrome()
+        scheduleAutoHideChrome()
     }
 
     private fun captureSnapshot() {
@@ -554,11 +565,17 @@ class PlayerActivity : AppCompatActivity() {
         if (locked) {
             topChrome.visibility = View.GONE
             bottomChrome.visibility = View.GONE
+            isChromeVisible = false
             unlockButton.visibility = View.VISIBLE
+            applyImmersiveMode()
+            autoHideHandler.postDelayed({
+                if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
+                    unlockButton.visibility = View.GONE
+                }
+            }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
         } else {
-            topChrome.visibility = View.VISIBLE
-            bottomChrome.visibility = View.VISIBLE
             unlockButton.visibility = View.GONE
+            showChrome()
         }
     }
 
@@ -611,6 +628,76 @@ class PlayerActivity : AppCompatActivity() {
         autoPlayButton.setImageResource(iconRes)
         autoPlayButton.alpha = if (isAutoPlayEnabled) 1f else 0.5f
     }
+
+    private fun toggleChromeVisibility() {
+        if (isChromeVisible) {
+            hideChrome()
+        } else {
+            showChrome()
+        }
+    }
+
+    private fun showChrome() {
+        if (!hasChromeSkeleton()) return
+        isChromeVisible = true
+        topChrome.visibility = View.VISIBLE
+        bottomChrome.visibility = View.VISIBLE
+        exitImmersiveMode()
+        scheduleAutoHideChrome()
+    }
+
+    private fun hideChrome() {
+        if (!hasChromeSkeleton()) return
+        isChromeVisible = false
+        topChrome.visibility = View.GONE
+        bottomChrome.visibility = View.GONE
+        cancelAutoHideChrome()
+        applyImmersiveMode()
+    }
+
+    private fun scheduleAutoHideChrome() {
+        cancelAutoHideChrome()
+        val state = playerManager.currentState()
+        if (state.hasActiveSession && state.playWhenReady) {
+            val delay = if (isScreenLocked) CHROME_LOCKED_AUTO_HIDE_DELAY_MS else CHROME_AUTO_HIDE_DELAY_MS
+            autoHideHandler.postDelayed(hideChromeRunnable, delay)
+        }
+    }
+
+    private fun cancelAutoHideChrome() {
+        autoHideHandler.removeCallbacks(hideChromeRunnable)
+    }
+
+    private fun toggleUnlockButtonVisibility() {
+        if (!isScreenLocked) return
+        val isVisible = unlockButton.visibility == View.VISIBLE
+        if (isVisible) {
+            unlockButton.visibility = View.GONE
+            applyImmersiveMode()
+        } else {
+            unlockButton.visibility = View.VISIBLE
+            exitImmersiveMode()
+            autoHideHandler.removeCallbacks(hideChromeRunnable)
+            autoHideHandler.postDelayed({
+                if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
+                    unlockButton.visibility = View.GONE
+                    applyImmersiveMode()
+                }
+            }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
+        }
+    }
+
+    private fun applyImmersiveMode() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    private fun exitImmersiveMode() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.show(WindowInsetsCompat.Type.systemBars())
+    }
+
     private fun refreshSubtitleManager() {
         subtitleManager = playerManager.subtitleSessionController()?.let { controller ->
             SubtitleManager(
@@ -921,7 +1008,9 @@ class PlayerActivity : AppCompatActivity() {
             onTogglePlayPause = ::togglePlayback,
             onFastForward = ::startTemporaryFastForward,
             onFastForwardEnd = ::endTemporaryFastForward,
-            onZoom = ::applyZoomFactor
+            onZoom = ::applyZoomFactor,
+            onSingleTapConfirmed = ::toggleChromeVisibility,
+            onSingleTapWhileLocked = ::toggleUnlockButtonVisibility
         )
     }
 

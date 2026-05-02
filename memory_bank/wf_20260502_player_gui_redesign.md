@@ -10,6 +10,8 @@ Redesign giao diện điều khiển CxPlayer theo mẫu `video_player_module`:
 - **Subtitle**: Toggle/popup tùy số lượng track
 - **Auto-play**: Toggle bật/tắt
 - **Overflow menu**: Settings chuyển vào popup menu
+- **Auto-hide Chrome**: Single tap toggle, tự ẩn sau 5s khi đang play, 3s khi locked
+- **Immersive Mode**: Ẩn status bar + navigation bar đồng bộ với chrome visibility
 
 ## Các file đã sửa
 
