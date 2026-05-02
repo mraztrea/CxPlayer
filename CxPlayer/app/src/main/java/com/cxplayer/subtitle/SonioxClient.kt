@@ -29,6 +29,7 @@ class SonioxClient(private val scope: CoroutineScope) {
     private var ws: WebSocket? = null
     private var config: SonioxConfig? = null
     private var reconnectAttempts = 0
+    private var hasValidatedSession = false
     private var sessionStartTime = 0L
     private var keepaliveJob: Job? = null
     private var sessionResetJob: Job? = null
@@ -57,7 +58,11 @@ class SonioxClient(private val scope: CoroutineScope) {
     }
 
     fun sendAudio(pcmData: ByteArray) {
-        ws?.send(pcmData.toByteString())
+        if (_connectionState.value != ConnectionState.ACTIVE) return
+        val sent = ws?.send(pcmData.toByteString()) ?: false
+        if (!sent) {
+            Log.w(TAG, "sendAudio: WebSocket send failed, dropped ${pcmData.size} bytes")
+        }
     }
 
     fun disconnect() {
@@ -65,10 +70,12 @@ class SonioxClient(private val scope: CoroutineScope) {
         sessionResetJob?.cancel()
         ws?.close(1000, "stopped")
         ws = null
+        hasValidatedSession = false
         _connectionState.value = ConnectionState.IDLE
     }
 
     private fun openConnection() {
+        hasValidatedSession = false
         _connectionState.value = ConnectionState.CONNECTING
         val request = Request.Builder().url(WS_URL).build()
         ws = client.newWebSocket(request, object : WebSocketListener() {
@@ -77,12 +84,12 @@ class SonioxClient(private val scope: CoroutineScope) {
                 sendConfig(webSocket)
                 _connectionState.value = ConnectionState.ACTIVE
                 sessionStartTime = System.currentTimeMillis()
-                reconnectAttempts = 0
                 startKeepalive()
                 startSessionResetTimer()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d(TAG, "onMessage: ${text.take(200)}")
                 handleResponse(text)
             }
 
@@ -110,8 +117,6 @@ class SonioxClient(private val scope: CoroutineScope) {
             put("audio_format", "pcm_s16le")
             put("sample_rate", 16000)
             put("num_channels", 1)
-            put("enable_endpoint_detection", true)
-            put("max_endpoint_delay_ms", 3000)
             put("enable_speaker_diarization", true)
             put("enable_language_identification", true)
             put("translation", JSONObject().apply {
@@ -126,12 +131,30 @@ class SonioxClient(private val scope: CoroutineScope) {
                 })
             }
         }
+        Log.d(TAG, "sendConfig: ${json.toString().replace(cfg.apiKey, "***")}")
         webSocket.send(json.toString())
     }
 
     private fun handleResponse(text: String) {
         try {
             val json = JSONObject(text)
+
+            // Xử lý error response từ server
+            val errorCode = json.optInt("error_code", 0)
+            if (errorCode != 0) {
+                val errorMsg = json.optString("error_message", "unknown")
+                Log.e(TAG, "Server error: code=$errorCode, message=$errorMsg")
+                _connectionState.value = ConnectionState.ERROR
+                ws?.close(1000, "server_error")
+                attemptReconnect()
+                return
+            }
+
+            if (!hasValidatedSession) {
+                hasValidatedSession = true
+                reconnectAttempts = 0
+            }
+
             val tokens = json.optJSONArray("tokens") ?: return
             for (i in 0 until tokens.length()) {
                 val token = tokens.getJSONObject(i)
@@ -189,6 +212,7 @@ class SonioxClient(private val scope: CoroutineScope) {
         val request = Request.Builder().url(WS_URL).build()
         ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                hasValidatedSession = false
                 sendConfig(webSocket)
                 sessionStartTime = System.currentTimeMillis()
                 // Đóng WebSocket cũ sau khi mới đã sẵn sàng

@@ -1,5 +1,7 @@
 package com.cxplayer.subtitle
 
+import android.util.Log
+
 import com.cxplayer.data.model.SonioxConfig
 import com.cxplayer.data.model.SrtEntry
 import com.cxplayer.data.model.SubtitleDisplayMode
@@ -14,6 +16,9 @@ import kotlinx.coroutines.launch
  * CxAudioProcessor → SonioxClient → SubtitleEvent → UI overlay.
  */
 class AiSubtitleManager(private val scope: CoroutineScope) {
+    companion object {
+        private const val TAG = "AiSubtitleManager"
+    }
     private val sonioxClient = SonioxClient(scope)
     private val collectedEntries = mutableListOf<SrtEntry>()
     private var currentOriginalText = StringBuilder()
@@ -33,6 +38,7 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
 
     fun start(config: SonioxConfig) {
         if (_isActive.value) return
+        Log.d(TAG, "start: connecting to Soniox (lang=${config.sourceLanguage} → ${config.targetLanguage})")
         _isActive.value = true
         collectedEntries.clear()
         currentOriginalText.clear()
@@ -72,6 +78,7 @@ class AiSubtitleManager(private val scope: CoroutineScope) {
 
     fun onAudioData(pcmData: ByteArray) {
         if (_isActive.value) {
+            Log.v(TAG, "onAudioData: ${pcmData.size} bytes")
             sonioxClient.sendAudio(pcmData)
         }
     }
