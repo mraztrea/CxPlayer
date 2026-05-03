@@ -94,6 +94,9 @@
     <string name="player_autoplay_content_description">Tự động phát tiếp</string>
     <string name="player_speed_content_description">Tốc độ phát</string>
     <string name="player_audio_track_content_description">Track âm thanh</string>
+    <string name="player_expand_content_description">Mở rộng thanh điều khiển</string>
+    <string name="player_collapse_content_description">Thu gọn thanh điều khiển</string>
+    <string name="player_pip_content_description">Chế độ cửa sổ nổi</string>
     <string name="player_resize_fit_label">Vừa khung</string>
     <string name="player_resize_fill_label">Lấp đầy</string>
     <string name="player_resize_zoom_label">Phóng to</string>

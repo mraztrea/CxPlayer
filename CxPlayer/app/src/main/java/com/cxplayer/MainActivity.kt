@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "[FIX]: Giu phu de AI dich khong bi mat som khi cau moi chua hien thi - 2026-05-03 00:19",
+        text = "[FEATURE]: Transport row redesign - collapsed/expanded - 2026-05-03 23:41",
         modifier = modifier
     )
 }
