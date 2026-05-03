@@ -34,4 +34,7 @@
     <dimen name="player_function_button_size">40dp</dimen>
     <dimen name="player_function_button_padding">8dp</dimen>
     <dimen name="player_function_button_spacing">4dp</dimen>
+    <dimen name="player_expanded_row_height">48dp</dimen>
+    <dimen name="player_side_buttons_width">48dp</dimen>
+    <dimen name="player_speed_button_text_size">14sp</dimen>
 </resources>

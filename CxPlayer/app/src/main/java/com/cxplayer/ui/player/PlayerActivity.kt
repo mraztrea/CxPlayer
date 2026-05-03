@@ -1,9 +1,14 @@
 package com.cxplayer.ui.player
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.app.PictureInPictureParams
 import android.graphics.Typeface
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -12,14 +17,10 @@ import android.os.Environment
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.EditText
-import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.StringRes
@@ -87,14 +88,16 @@ private const val STATE_SUBTITLE_STYLE_PRESET_INDEX = "state_subtitle_style_pres
 private const val STATE_SCREEN_LOCKED = "state_screen_locked"
 private const val STATE_RESIZE_MODE = "state_resize_mode"
 private const val STATE_AUTOPLAY_ENABLED = "state_autoplay_enabled"
+private const val STATE_TRANSPORT_EXPANDED = "state_transport_expanded"
 private const val ACTION_OPEN_INTERNAL_SMB = "com.cxplayer.action.OPEN_INTERNAL_SMB"
 private const val PREF_SONIOX_API_KEY = "pref_soniox_api_key"
 
-private val SPEED_VALUES = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-private const val DEFAULT_SPEED_INDEX = 3
+private val SPEED_VALUES = floatArrayOf(1.0f, 1.25f, 1.5f, 2.0f, 0.5f, 0.75f)
+private const val DEFAULT_SPEED_INDEX = 0
 private const val CHROME_AUTO_HIDE_DELAY_MS = 5000L
 private const val CHROME_LOCKED_AUTO_HIDE_DELAY_MS = 3000L
 private const val AI_SUBTITLE_SYNC_INTERVAL_MS = 50L
+private const val TRANSPORT_EXPAND_ANIMATION_DURATION_MS = 300L
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlayerBinding
@@ -115,6 +118,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var currentTimeView: TextView
     private lateinit var durationView: TextView
     private lateinit var seekBar: SeekBar
+    private lateinit var pipButton: ImageButton
     private lateinit var seekBackButton: ImageButton
     private lateinit var playPauseButton: ImageButton
     private lateinit var seekForwardButton: ImageButton
@@ -128,14 +132,16 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var aiSubtitleOriginalText: TextView
     private lateinit var aiSubtitleTranslationText: TextView
     private lateinit var aiSubtitleStatusText: TextView
-    private lateinit var functionRow: HorizontalScrollView
+    private lateinit var functionRow: ViewGroup
+    private lateinit var functionRowExpandable: LinearLayout
     private lateinit var lockButton: ImageButton
+    private lateinit var expandButton: ImageButton
     private lateinit var unlockButton: ImageButton
+    private lateinit var speedButton: TextView
     private lateinit var subtitleButton: ImageButton
     private lateinit var resizeButton: ImageButton
     private lateinit var rotateButton: ImageButton
     private lateinit var audioTrackButton: ImageButton
-    private lateinit var speedSpinner: Spinner
     private lateinit var autoPlayButton: ImageButton
     private val playerManager by lazy(LazyThreadSafetyMode.NONE) { CxPlayerManager(this) }
     private val networkBrowserDialog by lazy(LazyThreadSafetyMode.NONE) { NetworkBrowserDialog(this) }
@@ -161,6 +167,9 @@ class PlayerActivity : AppCompatActivity() {
     private var isAutoPlayEnabled: Boolean = true
     private var currentSpeedIndex: Int = DEFAULT_SPEED_INDEX
     private var isChromeVisible: Boolean = true
+    private var isTransportExpanded: Boolean = false
+    private var isTransportAnimating: Boolean = false
+    private var transportAnimator: ValueAnimator? = null
     private val autoHideHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val hideGestureOverlayRunnable = Runnable {
         currentGestureOverlayState = null
@@ -196,8 +205,17 @@ class PlayerActivity : AppCompatActivity() {
         initializeChromeLayoutBehavior()
         initializeGestureController()
         pendingSnapshot = restoreSnapshot(savedInstanceState)
+        applyTransportExpandedState()
         updatePendingLaunch(intent)
         updateTopChrome()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        binding.playerRoot.post {
+            renderChromeLayout(binding.playerRoot.height)
+            applyTransportExpandedState()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -230,6 +248,7 @@ class PlayerActivity : AppCompatActivity() {
         outState.putBoolean(STATE_SCREEN_LOCKED, isScreenLocked)
         outState.putInt(STATE_RESIZE_MODE, currentResizeMode)
         outState.putBoolean(STATE_AUTOPLAY_ENABLED, isAutoPlayEnabled)
+        outState.putBoolean(STATE_TRANSPORT_EXPANDED, isTransportExpanded)
         super.onSaveInstanceState(outState)
     }
 
@@ -431,6 +450,7 @@ class PlayerActivity : AppCompatActivity() {
         isScreenLocked = savedInstanceState?.getBoolean(STATE_SCREEN_LOCKED, false) ?: false
         currentResizeMode = savedInstanceState?.getInt(STATE_RESIZE_MODE, AspectRatioFrameLayout.RESIZE_MODE_FIT) ?: AspectRatioFrameLayout.RESIZE_MODE_FIT
         isAutoPlayEnabled = savedInstanceState?.getBoolean(STATE_AUTOPLAY_ENABLED, true) ?: true
+        isTransportExpanded = savedInstanceState?.getBoolean(STATE_TRANSPORT_EXPANDED, false) ?: false
         if (savedInstanceState == null || !savedInstanceState.containsKey(STATE_PLAYBACK_INDEX)) {
             return null
         }
@@ -459,6 +479,7 @@ class PlayerActivity : AppCompatActivity() {
         currentTimeView = binding.playerCurrentTimeView
         durationView = binding.playerDurationView
         seekBar = binding.playerSeekBar
+        pipButton = binding.playerPipButton
         seekBackButton = binding.playerSeekBackButton
         playPauseButton = binding.playerPlayPauseButton
         seekForwardButton = binding.playerSeekForwardButton
@@ -473,13 +494,15 @@ class PlayerActivity : AppCompatActivity() {
         aiSubtitleTranslationText = binding.aiSubtitleTranslationText
         aiSubtitleStatusText = binding.aiSubtitleStatusText
         functionRow = binding.playerFunctionRow
+        functionRowExpandable = binding.playerFunctionRowExpandable
         lockButton = binding.playerLockButton
+        expandButton = binding.playerExpandButton
         unlockButton = binding.playerUnlockButton
+        speedButton = binding.playerSpeedButton
         subtitleButton = binding.playerSubtitleButton
         resizeButton = binding.playerResizeButton
         rotateButton = binding.playerRotateButton
         audioTrackButton = binding.playerAudioTrackButton
-        speedSpinner = binding.playerSpeedSpinner
         autoPlayButton = binding.playerAutoPlayButton
     }
 
@@ -518,6 +541,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
         )
+        pipButton.setOnClickListener { enterPictureInPictureCompat() }
         seekBackButton.setOnClickListener { seekBack() }
         playPauseButton.setOnClickListener {
             val state = playerManager.currentState()
@@ -560,6 +584,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun initializeFunctionRow() {
         lockButton.setOnClickListener { setScreenLocked(true) }
         unlockButton.setOnClickListener { setScreenLocked(false) }
+        expandButton.setOnClickListener { toggleTransportExpand() }
         subtitleButton.setOnClickListener {
             val manager = subtitleManager
             if (manager == null) {
@@ -588,24 +613,15 @@ class PlayerActivity : AppCompatActivity() {
             updateAutoPlayButton()
             showMessage(if (isAutoPlayEnabled) R.string.player_autoplay_on_feedback else R.string.player_autoplay_off_feedback)
         }
-        setupSpeedSpinner()
+        speedButton.setOnClickListener { cyclePlaybackSpeed() }
+        applyPlaybackSpeedSelection()
+        applyTransportExpandedState()
         updateAutoPlayButton()
     }
 
-    private fun setupSpeedSpinner() {
-        val speedLabels = resources.getStringArray(R.array.player_speed_options)
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, speedLabels)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        speedSpinner.adapter = adapter
-        speedSpinner.setSelection(currentSpeedIndex)
-        speedSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                currentSpeedIndex = position
-                val speed = SPEED_VALUES.getOrElse(position) { 1.0f }
-                playerManager.setPlaybackSpeed(speed)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-        }
+    private fun cyclePlaybackSpeed() {
+        currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_VALUES.size
+        applyPlaybackSpeedSelection()
     }
 
     private fun setScreenLocked(locked: Boolean) {
@@ -614,20 +630,165 @@ class PlayerActivity : AppCompatActivity() {
             gestureController.isLocked = locked
         }
         if (locked) {
-            topChrome.visibility = View.GONE
-            bottomChrome.visibility = View.GONE
-            isChromeVisible = false
-            unlockButton.visibility = View.VISIBLE
-            applyImmersiveMode()
-            autoHideHandler.postDelayed({
-                if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
-                    unlockButton.visibility = View.GONE
-                }
-            }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
+            collapseTransportRow(animate = true) {
+                topChrome.visibility = View.GONE
+                bottomChrome.visibility = View.GONE
+                isChromeVisible = false
+                unlockButton.visibility = View.VISIBLE
+                applyImmersiveMode()
+                autoHideHandler.postDelayed({
+                    if (isScreenLocked && unlockButton.visibility == View.VISIBLE) {
+                        unlockButton.visibility = View.GONE
+                    }
+                }, CHROME_LOCKED_AUTO_HIDE_DELAY_MS)
+            }
         } else {
             unlockButton.visibility = View.GONE
             showChrome()
         }
+    }
+
+    private fun toggleTransportExpand() {
+        if (isTransportAnimating) {
+            return
+        }
+
+        setTransportExpanded(!isTransportExpanded, animate = true)
+    }
+
+    private fun collapseTransportRow(animate: Boolean, onComplete: (() -> Unit)? = null) {
+        if (!isTransportExpanded && functionRowExpandable.visibility != View.VISIBLE) {
+            applyTransportExpandedState()
+            onComplete?.invoke()
+            return
+        }
+
+        setTransportExpanded(expanded = false, animate = animate, onComplete = onComplete)
+    }
+
+    private fun setTransportExpanded(
+        expanded: Boolean,
+        animate: Boolean,
+        onComplete: (() -> Unit)? = null
+    ) {
+        val targetHeight = if (expanded) {
+            resources.getDimensionPixelSize(R.dimen.player_expanded_row_height)
+        } else {
+            0
+        }
+        val layoutParams = functionRowExpandable.layoutParams
+        val currentHeight = functionRowExpandable.height.takeIf { it > 0 }
+            ?: layoutParams.height.coerceAtLeast(0)
+
+        transportAnimator?.cancel()
+        transportAnimator = null
+        isTransportAnimating = false
+
+        if (!expanded) {
+            functionRowExpandable.visibility = View.VISIBLE
+        } else if (functionRowExpandable.visibility != View.VISIBLE) {
+            updateExpandedRowHeight(0)
+            functionRowExpandable.visibility = View.VISIBLE
+        }
+
+        if (!animate || currentHeight == targetHeight) {
+            isTransportExpanded = expanded
+            applyTransportExpandedState()
+            if (isChromeVisible && !isScreenLocked) {
+                scheduleAutoHideChrome()
+            }
+            onComplete?.invoke()
+            return
+        }
+
+        val animator = ValueAnimator.ofInt(currentHeight, targetHeight)
+        transportAnimator = animator
+        isTransportAnimating = true
+        animator.duration = TRANSPORT_EXPAND_ANIMATION_DURATION_MS
+        animator.addUpdateListener { valueAnimator ->
+            updateExpandedRowHeight(valueAnimator.animatedValue as Int)
+        }
+        animator.addListener(
+            object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (transportAnimator !== animator) {
+                        return
+                    }
+
+                    transportAnimator = null
+                    isTransportAnimating = false
+                    isTransportExpanded = expanded
+                    applyTransportExpandedState()
+                    if (isChromeVisible && !isScreenLocked) {
+                        scheduleAutoHideChrome()
+                    }
+                    onComplete?.invoke()
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    if (transportAnimator === animator) {
+                        transportAnimator = null
+                        isTransportAnimating = false
+                    }
+                }
+            }
+        )
+        animator.start()
+    }
+
+    private fun applyTransportExpandedState() {
+        if (!::functionRowExpandable.isInitialized || !::expandButton.isInitialized) {
+            return
+        }
+
+        val targetHeight = if (isTransportExpanded) {
+            resources.getDimensionPixelSize(R.dimen.player_expanded_row_height)
+        } else {
+            0
+        }
+        updateExpandedRowHeight(targetHeight)
+        functionRowExpandable.visibility = if (targetHeight == 0) View.GONE else View.VISIBLE
+        expandButton.setImageResource(
+            if (isTransportExpanded) {
+                R.drawable.ic_player_close
+            } else {
+                R.drawable.ic_player_expand
+            }
+        )
+        expandButton.contentDescription = getString(
+            if (isTransportExpanded) {
+                R.string.player_collapse_content_description
+            } else {
+                R.string.player_expand_content_description
+            }
+        )
+    }
+
+    private fun updateExpandedRowHeight(height: Int) {
+        val layoutParams = functionRowExpandable.layoutParams
+        if (layoutParams.height != height) {
+            layoutParams.height = height
+            functionRowExpandable.layoutParams = layoutParams
+        }
+    }
+
+    private fun applyPlaybackSpeedSelection() {
+        val speed = SPEED_VALUES.getOrElse(currentSpeedIndex) { SPEED_VALUES[DEFAULT_SPEED_INDEX] }
+        speedButton.text = formatPlaybackSpeedLabel(speed)
+        playerManager.setPlaybackSpeed(speed)
+    }
+
+    private fun formatPlaybackSpeedLabel(speed: Float): String {
+        val normalized = speed.toString().removeSuffix(".0")
+        return normalized.uppercase(Locale.ROOT) + "X"
+    }
+
+    private fun enterPictureInPictureCompat() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        enterPictureInPictureMode(PictureInPictureParams.Builder().build())
     }
 
     private fun showOverflowMenu() {
@@ -693,12 +854,19 @@ class PlayerActivity : AppCompatActivity() {
         isChromeVisible = true
         topChrome.visibility = View.VISIBLE
         bottomChrome.visibility = View.VISIBLE
+        applyTransportExpandedState()
         exitImmersiveMode()
         scheduleAutoHideChrome()
     }
 
     private fun hideChrome() {
         if (!hasChromeSkeleton()) return
+        if (isTransportExpanded) {
+            collapseTransportRow(animate = true) {
+                hideChrome()
+            }
+            return
+        }
         isChromeVisible = false
         topChrome.visibility = View.GONE
         bottomChrome.visibility = View.GONE
@@ -784,8 +952,14 @@ class PlayerActivity : AppCompatActivity() {
             return false
         }
 
+        val anchorView = when {
+            subtitleButton.visibility == View.VISIBLE -> subtitleButton
+            audioTrackButton.visibility == View.VISIBLE -> audioTrackButton
+            else -> overflowButton
+        }
+
         trackSelector.show(
-            anchor = trackSelectorButton,
+            anchor = anchorView,
             model = buildTrackSelectorModel(audioTracks, subtitleSources),
             onSelection = ::handleTrackSelectorSelection
         )
@@ -1259,6 +1433,7 @@ class PlayerActivity : AppCompatActivity() {
                 transportRow.layoutParams = layoutParams
             }
         }
+        applyTransportExpandedState()
     }
 
     private fun formatPlaybackTime(positionMs: Long): String {
